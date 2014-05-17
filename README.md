@@ -1,5 +1,7 @@
 # s3
 
+[![Build Status](https://secure.travis-ci.org/barnybug/s3.png)](http://travis-ci.org/barnybug/s3)
+
 Swiss army pen-knife for Amazon S3.
 
 - ls: List buckets or keys
