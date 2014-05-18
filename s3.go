@@ -80,7 +80,7 @@ func listKeys(conn *s3.S3, urls []string) {
 		if quiet {
 			fmt.Println(file)
 		} else {
-			fmt.Printf("%s\t%db\n", file, file.Size)
+			fmt.Printf("%s\t%db\n", file, file.Size())
 		}
 		count += 1
 		totalSize += file.Size()
