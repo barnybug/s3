@@ -9,16 +9,12 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -165,194 +161,6 @@ type Filesystem interface {
 	Delete(path string) error
 }
 
-type LocalFilesystem struct {
-	path string
-}
-
-type LocalFile struct {
-	info     os.FileInfo
-	fullpath string
-	relpath  string
-	md5      []byte
-}
-
-func (self *LocalFile) Name() string {
-	return self.relpath
-}
-
-func (self *LocalFile) Size() int64 {
-	return self.info.Size()
-}
-
-func (self *LocalFile) MD5() []byte {
-	if self.md5 == nil {
-		// cache md5
-		h := md5.New()
-		reader, err := os.Open(self.fullpath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		_, err = io.Copy(h, reader)
-		if err != nil {
-			log.Fatal(err)
-		}
-		self.md5 = h.Sum(nil)
-	}
-	return self.md5
-}
-
-func (self *LocalFile) Reader() (io.ReadCloser, error) {
-	return os.Open(self.fullpath)
-}
-
-func (self *LocalFile) String() string {
-	return self.relpath
-}
-
-func scanFiles(ch chan<- File, fullpath string, relpath string) {
-	entries, err := ioutil.ReadDir(fullpath)
-	if os.IsNotExist(err) {
-		// this is fine - indicates no files are there
-		return
-	}
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	for _, entry := range entries {
-		f := filepath.Join(fullpath, entry.Name())
-		r := filepath.Join(relpath, entry.Name())
-		if entry.IsDir() {
-			// recurse
-			scanFiles(ch, f, r)
-		} else {
-			ch <- &LocalFile{entry, f, r, nil}
-		}
-	}
-}
-
-func (self *LocalFilesystem) Files() <-chan File {
-	ch := make(chan File, 1000)
-	go func() {
-		defer close(ch)
-		scanFiles(ch, self.path, "")
-	}()
-	return ch
-}
-
-func (self *LocalFilesystem) Create(src File) error {
-	reader, err := src.Reader()
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-	fullpath := filepath.Join(self.path, src.Name())
-	dirpath := filepath.Dir(fullpath)
-	err = os.MkdirAll(dirpath, 0777)
-	if err != nil {
-		return err
-	}
-	writer, err := os.Create(fullpath)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	_, err = io.Copy(writer, reader)
-	return err
-}
-
-func (self *LocalFilesystem) Delete(path string) error {
-	fullpath := filepath.Join(self.path, path)
-	return os.Remove(fullpath)
-}
-
-type S3Filesystem struct {
-	conn   *s3.S3
-	bucket *s3.Bucket
-	path   string
-}
-
-type S3File struct {
-	bucket *s3.Bucket
-	key    *s3.Key
-	path   string
-	md5    []byte
-}
-
-func (self *S3File) Name() string {
-	return self.path
-}
-
-func (self *S3File) Size() int64 {
-	return self.key.Size
-}
-
-func (self *S3File) MD5() []byte {
-	if self.md5 == nil {
-		v := self.key.ETag[1 : len(self.key.ETag)-1]
-		self.md5, _ = hex.DecodeString(v)
-	}
-	return self.md5
-}
-
-func (self *S3File) Reader() (io.ReadCloser, error) {
-	resp, err := self.bucket.GetResponse(self.key.Key)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Body, err
-}
-
-func (self *S3File) String() string {
-	return fmt.Sprintf("s3://%s/%s", self.bucket.Name, self.key.Key)
-}
-
-func (self *S3Filesystem) Files() <-chan File {
-	ch := make(chan File, 1000)
-	go func() {
-		defer close(ch)
-		iterateKeys(self.conn, self.bucket, self.path, func(key *s3.Key) {
-			relpath := key.Key[len(self.path):]
-			ch <- &S3File{self.bucket, key, relpath, nil}
-		})
-	}()
-	return ch
-}
-
-func (self *S3Filesystem) Create(src File) error {
-	var reader io.ReadCloser
-	var contType string
-	switch t := src.(type) {
-	case *S3File:
-		// special case for S3File to preserve header information
-		resp, err := t.bucket.GetResponse(t.key.Key)
-		if err != nil {
-			return err
-		}
-		reader = resp.Body
-		defer reader.Close()
-		contType = resp.Header.Get("Content-Type")
-	default:
-		var err error
-		reader, err = src.Reader()
-		if err != nil {
-			return err
-		}
-		defer reader.Close()
-		// TODO: content-type
-		contType = "application/binary"
-		// TODO: acl
-	}
-
-	fullpath := filepath.Join(self.path, src.Name())
-	err := self.bucket.PutReader(fullpath, reader, src.Size(), contType, s3.PublicRead)
-	return err
-}
-
-func (self *S3Filesystem) Delete(path string) error {
-	fullpath := filepath.Join(self.path, path)
-	return self.bucket.Del(fullpath)
-}
-
 func getFilesystem(conn *s3.S3, url string) Filesystem {
 	if strings.HasPrefix(url, "s3:") {
 		bucket, prefix := extractBucketPath(conn, url)
@@ -371,18 +179,27 @@ func processAction(action Action, fs2 Filesystem) {
 	switch action.Action {
 	case "create":
 		fmt.Printf("A %s\n", action.File.Name())
+		if dryRun {
+			return
+		}
 		err := fs2.Create(action.File)
 		if err != nil {
 			log.Fatal(err)
 		}
 	case "delete":
 		fmt.Printf("D %s\n", action.File.Name())
+		if dryRun {
+			return
+		}
 		err := fs2.Delete(action.File.Name())
 		if err != nil {
 			log.Fatal(err)
 		}
 	case "update":
 		fmt.Printf("U %s\n", action.File.Name())
+		if dryRun {
+			return
+		}
 		err := fs2.Create(action.File)
 		if err != nil {
 			log.Fatal(err)
@@ -426,8 +243,10 @@ func syncFiles(conn *s3.S3, url1, url2 string) {
 			added += 1
 			f1 = <-ch1
 		} else if f1 == nil || (f2 != nil && f1.Name() > f2.Name()) {
-			q <- Action{"delete", f2}
-			deleted += 1
+			if delete {
+				q <- Action{"delete", f2}
+				deleted += 1
+			}
 			f2 = <-ch2
 		} else if f1.Size() != f2.Size() || bytes.Compare(f1.MD5(), f2.MD5()) != 0 {
 			// fmt.Println(f1.Name(), f2.Name(), f1.Size(), f2.Size(), f1.MD5(), f2.MD5())
@@ -449,8 +268,12 @@ func syncFiles(conn *s3.S3, url1, url2 string) {
 	took := end.Sub(start)
 	rate := float64(added+deleted+updated) / took.Seconds()
 
-	fmt.Printf(`-- summary --
-%d added %d deleted %d updated %d unchanged
+	if dryRun {
+		fmt.Println("-- summary (dry-run) --")
+	} else {
+		fmt.Println("-- summary --")
+	}
+	fmt.Printf(`%d added %d deleted %d updated %d unchanged
 took: %s (%.1f ops/s)
 
 `, added, deleted, updated, unchanged, took, rate)
@@ -458,7 +281,21 @@ took: %s (%.1f ops/s)
 
 var (
 	parallel int
+	dryRun   bool
+	delete   bool
+	public   bool
+	acl      string
 )
+
+var ValidACLs = map[string]bool{
+	"private":                   true,
+	"public-read":               true,
+	"public-read-write":         true,
+	"authenticated-read":        true,
+	"bucket-owner-read":         true,
+	"bucket-owner-full-control": true,
+	"log-delivery-write":        true,
+}
 
 func main() {
 
@@ -473,7 +310,11 @@ Commands:
 `)
 		flag.PrintDefaults()
 	}
-	flag.IntVar(&parallel, "p", 32, "Number of parallel operations to run")
+	flag.IntVar(&parallel, "p", 32, "number of parallel operations to run")
+	flag.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
+	flag.BoolVar(&delete, "delete", false, "delete extraneous files from destination")
+	flag.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
+	flag.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
 
 	if len(os.Args) < 2 {
 		flag.Usage()
@@ -484,6 +325,13 @@ Commands:
 	// pop out the command argument
 	os.Args = append(os.Args[0:1], os.Args[2:]...)
 	flag.Parse()
+	if public {
+		acl = "public-read"
+	}
+	if acl != "" && !ValidACLs[acl] {
+		fmt.Println("-acl should be one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
+		os.Exit(-1)
+	}
 
 	auth, err := aws.EnvAuth()
 	if err != nil {
@@ -493,7 +341,7 @@ Commands:
 
 	switch command {
 	case "ls":
-		if len(flag.Args()) < 2 {
+		if len(flag.Args()) < 1 {
 			listBuckets(conn)
 		} else {
 			listKeys(conn, flag.Arg(0))
