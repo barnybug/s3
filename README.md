@@ -8,6 +8,7 @@ Swiss army pen-knife for Amazon S3.
 - get: Download keys
 - cat: Cat keys
 - sync: Synchronise local to s3, s3 to local or s3 to s3
+- rm: Delete keys
 
 # Installation
 
@@ -29,3 +30,4 @@ Set the environment variables:
     s3 sync localpath s3://bucket/path
     s3 sync s3://bucket/path
     s3 sync s3://bucket1/path s3://bucket2/otherpath
+    s3 rm s3://bucket/path

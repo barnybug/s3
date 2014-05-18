@@ -148,6 +148,17 @@ func catKeys(conn *s3.S3, url string) {
 	})
 }
 
+func rmKeys(conn *s3.S3, url string) {
+	bucket, prefix := extractBucketPath(conn, url)
+	// TODO: implement multi-delete in goamz
+	iterateKeysParallel(conn, bucket, prefix, func(key *s3.Key) {
+		fmt.Printf("D s3://%s/%s\n", bucket.Name, key.Key)
+		if !dryRun {
+			bucket.Del(key.Key)
+		}
+	})
+}
+
 type File interface {
 	Name() string
 	Size() int64
@@ -352,6 +363,8 @@ Commands:
 		catKeys(conn, flag.Arg(0))
 	case "sync":
 		syncFiles(conn, flag.Arg(0), flag.Arg(1))
+	case "rm":
+		rmKeys(conn, flag.Arg(0))
 	default:
 		flag.Usage()
 		os.Exit(-1)
