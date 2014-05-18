@@ -393,16 +393,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [source...] [destination]
 
 Commands:
-	ls		List buckets or keys
-	get 	Download keys
-	cat		Cat keys
+	cat	Cat key contents
+	get	Download keys
+	ls	List buckets or keys
+	put 	Upload files
+	rm	Delete keys
 	sync	Synchronise local to s3, s3 to s3 or s3 to local
+
+Options:
 `)
 		flag.PrintDefaults()
 	}
 	flag.IntVar(&parallel, "p", 32, "number of parallel operations to run")
 	flag.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
-	flag.BoolVar(&delete, "delete", false, "delete extraneous files from destination")
+	flag.BoolVar(&delete, "delete", false, "delete extraneous files from destination (sync)")
 	flag.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
 	flag.BoolVar(&quiet, "q", false, "quieter (less verbose) output")
 	flag.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
