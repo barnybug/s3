@@ -57,7 +57,7 @@ func (self *LocalFilesystem) Create(src File) error {
 		return err
 	}
 	defer reader.Close()
-	fullpath := filepath.Join(self.path, src.Name())
+	fullpath := filepath.Join(self.path, src.Relative())
 	dirpath := filepath.Dir(fullpath)
 	err = os.MkdirAll(dirpath, 0777)
 	if err != nil {
@@ -84,7 +84,7 @@ type LocalFile struct {
 	md5      []byte
 }
 
-func (self *LocalFile) Name() string {
+func (self *LocalFile) Relative() string {
 	return self.relpath
 }
 

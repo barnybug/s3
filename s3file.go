@@ -25,7 +25,7 @@ type S3File struct {
 	md5    []byte
 }
 
-func (self *S3File) Name() string {
+func (self *S3File) Relative() string {
 	return self.path
 }
 
@@ -125,10 +125,10 @@ func (self *S3Filesystem) Create(src File) error {
 			return err
 		}
 		defer reader.Close()
-		headers["Content-Type"] = []string{guessMimeType(src.Name())}
+		headers["Content-Type"] = []string{guessMimeType(src.Relative())}
 	}
 
-	fullpath := filepath.Join(self.path, src.Name())
+	fullpath := filepath.Join(self.path, src.Relative())
 	err := self.bucket.PutReaderHeader(fullpath, reader, src.Size(), headers, perm)
 	return err
 }

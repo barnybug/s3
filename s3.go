@@ -9,6 +9,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"flag"
 	"fmt"
 	"io"
@@ -99,7 +100,7 @@ func getKeys(conn *s3.S3, urls []string) {
 		defer reader.Close()
 
 		// write files under relative path to the source path
-		fpath := file.Name()
+		fpath := file.Relative()
 		dirpath := path.Dir(fpath)
 		if dirpath != "." {
 			err = os.MkdirAll(dirpath, 0777)
@@ -123,12 +124,19 @@ func getKeys(conn *s3.S3, urls []string) {
 }
 
 func catKeys(conn *s3.S3, urls []string) {
-	iterateKeys(conn, urls, func(file File) {
+	iterateKeysParallel(conn, urls, func(file File) {
 		reader, err := file.Reader()
 		if err != nil {
 			log.Fatal(err.Error())
 		}
 		defer reader.Close()
+
+		if strings.HasSuffix(file.String(), ".gz") {
+			reader, err = gzip.NewReader(reader)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+		}
 
 		_, err = io.Copy(os.Stdout, reader)
 		if err != nil {
@@ -226,11 +234,12 @@ func putKeys(conn *s3.S3, urls []string) {
 }
 
 type File interface {
-	Name() string
+	Relative() string
 	Size() int64
 	MD5() []byte
 	Reader() (io.ReadCloser, error)
 	Delete() error
+	String() string
 }
 
 type Filesystem interface {
@@ -257,7 +266,7 @@ func processAction(action Action, fs2 Filesystem) {
 	switch action.Action {
 	case "create":
 		if !quiet {
-			fmt.Printf("A %s\n", action.File.Name())
+			fmt.Printf("A %s\n", action.File.Relative())
 		}
 		if dryRun {
 			return
@@ -268,18 +277,18 @@ func processAction(action Action, fs2 Filesystem) {
 		}
 	case "delete":
 		if !quiet {
-			fmt.Printf("D %s\n", action.File.Name())
+			fmt.Printf("D %s\n", action.File.Relative())
 		}
 		if dryRun {
 			return
 		}
-		err := fs2.Delete(action.File.Name())
+		err := fs2.Delete(action.File.Relative())
 		if err != nil {
 			log.Fatal(err)
 		}
 	case "update":
 		if !quiet {
-			fmt.Printf("U %s\n", action.File.Name())
+			fmt.Printf("U %s\n", action.File.Relative())
 		}
 		if dryRun {
 			return
@@ -328,11 +337,11 @@ func syncFiles(conn *s3.S3, urls []string) {
 		// if f1 = f2, check size, md5
 		if f1 == nil && f2 == nil {
 			break
-		} else if f2 == nil || (f1 != nil && f1.Name() < f2.Name()) {
+		} else if f2 == nil || (f1 != nil && f1.Relative() < f2.Relative()) {
 			q <- Action{"create", f1}
 			added += 1
 			f1 = <-ch1
-		} else if f1 == nil || (f2 != nil && f1.Name() > f2.Name()) {
+		} else if f1 == nil || (f2 != nil && f1.Relative() > f2.Relative()) {
 			if delete {
 				q <- Action{"delete", f2}
 				deleted += 1
