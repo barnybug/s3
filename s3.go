@@ -89,9 +89,19 @@ func iterateKeysParallel(conn *s3.S3, bucket *s3.Bucket, prefix string, callback
 
 func listKeys(conn *s3.S3, url string) {
 	bucket, prefix := extractBucketPath(conn, url)
+	var count, totalSize int64
 	iterateKeys(conn, bucket, prefix, func(key *s3.Key) {
-		fmt.Printf("s3://%s/%s\n", bucket.Name, key.Key)
+		if quiet {
+			fmt.Printf("s3://%s/%s\n", bucket.Name, key.Key)
+		} else {
+			fmt.Printf("s3://%s/%s\t%s\t%db\n", bucket.Name, key.Key, key.LastModified, key.Size)
+		}
+		count += 1
+		totalSize += key.Size
 	})
+	if !quiet {
+		fmt.Printf("\n%d files, %d bytes\n", count, totalSize)
+	}
 }
 
 func getKeys(conn *s3.S3, url string) {
@@ -152,7 +162,9 @@ func rmKeys(conn *s3.S3, url string) {
 	bucket, prefix := extractBucketPath(conn, url)
 	// TODO: implement multi-delete in goamz
 	iterateKeysParallel(conn, bucket, prefix, func(key *s3.Key) {
-		fmt.Printf("D s3://%s/%s\n", bucket.Name, key.Key)
+		if !quiet {
+			fmt.Printf("D s3://%s/%s\n", bucket.Name, key.Key)
+		}
 		if !dryRun {
 			bucket.Del(key.Key)
 		}
@@ -189,7 +201,9 @@ type Action struct {
 func processAction(action Action, fs2 Filesystem) {
 	switch action.Action {
 	case "create":
-		fmt.Printf("A %s\n", action.File.Name())
+		if !quiet {
+			fmt.Printf("A %s\n", action.File.Name())
+		}
 		if dryRun {
 			return
 		}
@@ -198,7 +212,9 @@ func processAction(action Action, fs2 Filesystem) {
 			log.Fatal(err)
 		}
 	case "delete":
-		fmt.Printf("D %s\n", action.File.Name())
+		if !quiet {
+			fmt.Printf("D %s\n", action.File.Name())
+		}
 		if dryRun {
 			return
 		}
@@ -207,7 +223,9 @@ func processAction(action Action, fs2 Filesystem) {
 			log.Fatal(err)
 		}
 	case "update":
-		fmt.Printf("U %s\n", action.File.Name())
+		if !quiet {
+			fmt.Printf("U %s\n", action.File.Name())
+		}
 		if dryRun {
 			return
 		}
@@ -295,6 +313,7 @@ var (
 	dryRun   bool
 	delete   bool
 	public   bool
+	quiet    bool
 	acl      string
 )
 
@@ -325,6 +344,7 @@ Commands:
 	flag.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
 	flag.BoolVar(&delete, "delete", false, "delete extraneous files from destination")
 	flag.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
+	flag.BoolVar(&quiet, "q", false, "quieter (less verbose) output")
 	flag.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
 
 	if len(os.Args) < 2 {
