@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -48,6 +49,10 @@ func (self *S3File) Reader() (io.ReadCloser, error) {
 	return resp.Body, err
 }
 
+func (self *S3File) Delete() error {
+	return self.bucket.Del(self.key.Key)
+}
+
 func (self *S3File) String() string {
 	return fmt.Sprintf("s3://%s/%s", self.bucket.Name, self.key.Key)
 }
@@ -56,10 +61,27 @@ func (self *S3Filesystem) Files() <-chan File {
 	ch := make(chan File, 1000)
 	go func() {
 		defer close(ch)
-		iterateKeys(self.conn, self.bucket, self.path, func(key *s3.Key) {
-			relpath := key.Key[len(self.path):]
-			ch <- &S3File{self.bucket, key, relpath, nil}
-		})
+		truncated := true
+		marker := ""
+		for truncated {
+			data, err := self.bucket.List(self.path, "", marker, 0)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			last_key := ""
+			for _, c := range data.Contents {
+				key := c
+				relpath := key.Key[len(self.path):]
+				ch <- &S3File{self.bucket, &key, relpath, nil}
+				last_key = c.Key
+			}
+			truncated = data.IsTruncated
+			marker = data.NextMarker
+			if marker == "" {
+				// Response may not include NextMarker.
+				marker = last_key
+			}
+		}
 	}()
 	return ch
 }

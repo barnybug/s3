@@ -42,33 +42,20 @@ func listBuckets(conn *s3.S3) {
 	}
 }
 
-func iterateKeys(conn *s3.S3, bucket *s3.Bucket, prefix string, callback func(key *s3.Key)) {
-	truncated := true
-	marker := ""
-	for truncated {
-		data, err := bucket.List(prefix, "", marker, 0)
-		if err != nil {
-			log.Fatal(err.Error())
-		}
-		last_key := ""
-		for _, c := range data.Contents {
-			k := c
-			callback(&k)
-			last_key = c.Key
-		}
-		truncated = data.IsTruncated
-		marker = data.NextMarker
-		if marker == "" {
-			// Response may not include NextMarker.
-			marker = last_key
+func iterateKeys(conn *s3.S3, urls []string, callback func(file File)) {
+	for _, url := range urls {
+		fs := getFilesystem(conn, url)
+		ch := fs.Files()
+		for file := range ch {
+			callback(file)
 		}
 	}
 }
 
-func iterateKeysParallel(conn *s3.S3, bucket *s3.Bucket, prefix string, callback func(key *s3.Key)) {
+func iterateKeysParallel(conn *s3.S3, urls []string, callback func(file File)) {
 	// create pool for processing
 	wg := sync.WaitGroup{}
-	q := make(chan *s3.Key, 1000)
+	q := make(chan File, 1000)
 	for i := 0; i < parallel; i += 1 {
 		wg.Add(1)
 		go func() {
@@ -79,49 +66,40 @@ func iterateKeysParallel(conn *s3.S3, bucket *s3.Bucket, prefix string, callback
 		}()
 	}
 
-	iterateKeys(conn, bucket, prefix, func(key *s3.Key) {
-		q <- key
+	iterateKeys(conn, urls, func(file File) {
+		q <- file
 	})
 
 	close(q)
 	wg.Wait()
 }
 
-func listKeys(conn *s3.S3, url string) {
-	bucket, prefix := extractBucketPath(conn, url)
+func listKeys(conn *s3.S3, urls []string) {
 	var count, totalSize int64
-	iterateKeys(conn, bucket, prefix, func(key *s3.Key) {
+	iterateKeys(conn, urls, func(file File) {
 		if quiet {
-			fmt.Printf("s3://%s/%s\n", bucket.Name, key.Key)
+			fmt.Println(file)
 		} else {
-			fmt.Printf("s3://%s/%s\t%s\t%db\n", bucket.Name, key.Key, key.LastModified, key.Size)
+			fmt.Printf("%s\t%db\n", file, file.Size)
 		}
 		count += 1
-		totalSize += key.Size
+		totalSize += file.Size()
 	})
 	if !quiet {
 		fmt.Printf("\n%d files, %d bytes\n", count, totalSize)
 	}
 }
 
-func getKeys(conn *s3.S3, url string) {
-	bucket, prefix := extractBucketPath(conn, url)
-	prefixPath := path.Dir(prefix)
-	if prefixPath == "." {
-		prefixPath = ""
-	} else {
-		prefixPath = prefixPath + "/"
-	}
-
-	iterateKeysParallel(conn, bucket, prefix, func(key *s3.Key) {
-		reader, err := bucket.GetReader(key.Key)
+func getKeys(conn *s3.S3, urls []string) {
+	iterateKeysParallel(conn, urls, func(file File) {
+		reader, err := file.Reader()
 		if err != nil {
 			log.Fatal(err.Error())
 		}
 		defer reader.Close()
 
 		// write files under relative path to the source path
-		fpath := key.Key[len(prefixPath):]
+		fpath := file.Name()
 		dirpath := path.Dir(fpath)
 		if dirpath != "." {
 			err = os.MkdirAll(dirpath, 0777)
@@ -138,14 +116,13 @@ func getKeys(conn *s3.S3, url string) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		fmt.Printf("s3://%s/%s -> %s (%d bytes)\n", bucket.Name, key.Key, fpath, nbytes)
+		fmt.Printf("%s -> %s (%d bytes)\n", file, fpath, nbytes)
 	})
 }
 
-func catKeys(conn *s3.S3, url string) {
-	bucket, prefix := extractBucketPath(conn, url)
-	iterateKeys(conn, bucket, prefix, func(key *s3.Key) {
-		reader, err := bucket.GetReader(key.Key)
+func catKeys(conn *s3.S3, urls []string) {
+	iterateKeys(conn, urls, func(file File) {
+		reader, err := file.Reader()
 		if err != nil {
 			log.Fatal(err.Error())
 		}
@@ -158,15 +135,14 @@ func catKeys(conn *s3.S3, url string) {
 	})
 }
 
-func rmKeys(conn *s3.S3, url string) {
-	bucket, prefix := extractBucketPath(conn, url)
+func rmKeys(conn *s3.S3, urls []string) {
 	// TODO: implement multi-delete in goamz
-	iterateKeysParallel(conn, bucket, prefix, func(key *s3.Key) {
+	iterateKeysParallel(conn, urls, func(file File) {
 		if !quiet {
-			fmt.Printf("D s3://%s/%s\n", bucket.Name, key.Key)
+			fmt.Printf("D %s\n", file)
 		}
 		if !dryRun {
-			bucket.Del(key.Key)
+			file.Delete()
 		}
 	})
 }
@@ -176,6 +152,7 @@ type File interface {
 	Size() int64
 	MD5() []byte
 	Reader() (io.ReadCloser, error)
+	Delete() error
 }
 
 type Filesystem interface {
@@ -236,7 +213,13 @@ func processAction(action Action, fs2 Filesystem) {
 	}
 }
 
-func syncFiles(conn *s3.S3, url1, url2 string) {
+func syncFiles(conn *s3.S3, urls []string) {
+	if len(urls) != 2 {
+		// TODO: support multiple sources -> single destination
+		panic("Unsupported")
+	}
+	url1 := urls[0]
+	url2 := urls[1]
 	start := time.Now()
 	fs1 := getFilesystem(conn, url1)
 	fs2 := getFilesystem(conn, url2)
@@ -327,10 +310,18 @@ var ValidACLs = map[string]bool{
 	"log-delivery-write":        true,
 }
 
+var minArgs = map[string]int{
+	"cat":  1,
+	"get":  1,
+	"ls":   0,
+	"rm":   1,
+	"sync": 2,
+}
+
 func main() {
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [arg...]
+		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [source...] [destination]
 
 Commands:
 	ls		List buckets or keys
@@ -370,23 +361,31 @@ Commands:
 	}
 	conn := s3.New(auth, aws.EUWest)
 
+	if _, ok := minArgs[command]; !ok {
+		flag.Usage()
+		os.Exit(-1)
+	}
+
+	if len(flag.Args()) < minArgs[command] {
+		fmt.Println("More arguments required\n")
+		flag.Usage()
+		os.Exit(-1)
+	}
+
 	switch command {
 	case "ls":
 		if len(flag.Args()) < 1 {
 			listBuckets(conn)
 		} else {
-			listKeys(conn, flag.Arg(0))
+			listKeys(conn, flag.Args())
 		}
 	case "get":
-		getKeys(conn, flag.Arg(0))
+		getKeys(conn, flag.Args())
 	case "cat":
-		catKeys(conn, flag.Arg(0))
+		catKeys(conn, flag.Args())
 	case "sync":
-		syncFiles(conn, flag.Arg(0), flag.Arg(1))
+		syncFiles(conn, flag.Args())
 	case "rm":
-		rmKeys(conn, flag.Arg(0))
-	default:
-		flag.Usage()
-		os.Exit(-1)
+		rmKeys(conn, flag.Args())
 	}
 }

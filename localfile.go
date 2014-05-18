@@ -105,6 +105,10 @@ func (self *LocalFile) Reader() (io.ReadCloser, error) {
 	return os.Open(self.fullpath)
 }
 
+func (self *LocalFile) Delete() error {
+	return os.Remove(self.fullpath)
+}
+
 func (self *LocalFile) String() string {
 	return self.relpath
 }
