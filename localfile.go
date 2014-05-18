@@ -38,7 +38,15 @@ func (self *LocalFilesystem) Files() <-chan File {
 	ch := make(chan File, 1000)
 	go func() {
 		defer close(ch)
-		scanFiles(ch, self.path, "")
+		fi, err := os.Stat(self.path)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		if fi.IsDir() {
+			scanFiles(ch, self.path, "")
+		} else {
+			ch <- &LocalFile{fi, self.path, self.path, nil}
+		}
 	}()
 	return ch
 }

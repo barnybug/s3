@@ -116,7 +116,9 @@ func getKeys(conn *s3.S3, urls []string) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		fmt.Printf("%s -> %s (%d bytes)\n", file, fpath, nbytes)
+		if !quiet {
+			fmt.Printf("%s -> %s (%d bytes)\n", file, fpath, nbytes)
+		}
 	})
 }
 
@@ -136,15 +138,91 @@ func catKeys(conn *s3.S3, urls []string) {
 }
 
 func rmKeys(conn *s3.S3, urls []string) {
-	// TODO: implement multi-delete in goamz
-	iterateKeysParallel(conn, urls, func(file File) {
+	batch := make([]string, 0, 1000)
+	var bucket *s3.Bucket
+	start := time.Now()
+	var deleted int
+	iterateKeys(conn, urls, func(file File) {
+		deleted += 1
 		if !quiet {
 			fmt.Printf("D %s\n", file)
 		}
-		if !dryRun {
-			file.Delete()
+		switch t := file.(type) {
+		case *S3File:
+			// optimize as a batch delete
+			if bucket != nil && t.bucket != bucket && len(batch) > 0 {
+				if !dryRun {
+					bucket.MultiDel(batch)
+				}
+				batch = batch[:0]
+			}
+			bucket = t.bucket
+			batch = append(batch, t.key.Key)
+			if len(batch) == 1000 {
+				if !dryRun {
+					// send batch delete
+					bucket.MultiDel(batch)
+				}
+				batch = batch[:0]
+			}
+
+		default:
+			if !dryRun {
+				file.Delete()
+			}
 		}
 	})
+
+	// final batch
+	if len(batch) > 0 {
+		if !dryRun {
+			bucket.MultiDel(batch)
+		}
+	}
+	end := time.Now()
+	took := end.Sub(start)
+	summary(0, deleted, 0, 0, took)
+}
+
+func summary(added, deleted, updated, unchanged int, took time.Duration) {
+	rate := float64(added+deleted+updated) / took.Seconds()
+
+	if dryRun {
+		fmt.Println("-- summary (dry-run) --")
+	} else {
+		fmt.Println("-- summary --")
+	}
+	fmt.Printf(`%d added %d deleted %d updated %d unchanged
+took: %s (%.1f ops/s)
+
+`, added, deleted, updated, unchanged, took, rate)
+}
+
+func putKeys(conn *s3.S3, urls []string) {
+	sources := urls[:len(urls)-1]
+	destination := urls[len(urls)-1]
+	start := time.Now()
+	dfs := getFilesystem(conn, destination)
+	var added int
+	iterateKeysParallel(conn, sources, func(file File) {
+		reader, err := file.Reader()
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		defer reader.Close()
+
+		if !quiet {
+			fmt.Printf("A %s\n", file)
+		}
+		err = dfs.Create(file)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		added += 1
+	})
+	end := time.Now()
+	took := end.Sub(start)
+	summary(added, 0, 0, 0, took)
 }
 
 type File interface {
@@ -278,17 +356,7 @@ func syncFiles(conn *s3.S3, urls []string) {
 
 	end := time.Now()
 	took := end.Sub(start)
-	rate := float64(added+deleted+updated) / took.Seconds()
-
-	if dryRun {
-		fmt.Println("-- summary (dry-run) --")
-	} else {
-		fmt.Println("-- summary --")
-	}
-	fmt.Printf(`%d added %d deleted %d updated %d unchanged
-took: %s (%.1f ops/s)
-
-`, added, deleted, updated, unchanged, took, rate)
+	summary(added, deleted, updated, unchanged, took)
 }
 
 var (
@@ -314,6 +382,7 @@ var minArgs = map[string]int{
 	"cat":  1,
 	"get":  1,
 	"ls":   0,
+	"put":  2,
 	"rm":   1,
 	"sync": 2,
 }
@@ -373,16 +442,18 @@ Commands:
 	}
 
 	switch command {
+	case "cat":
+		catKeys(conn, flag.Args())
+	case "get":
+		getKeys(conn, flag.Args())
 	case "ls":
 		if len(flag.Args()) < 1 {
 			listBuckets(conn)
 		} else {
 			listKeys(conn, flag.Args())
 		}
-	case "get":
-		getKeys(conn, flag.Args())
-	case "cat":
-		catKeys(conn, flag.Args())
+	case "put":
+		putKeys(conn, flag.Args())
 	case "sync":
 		syncFiles(conn, flag.Args())
 	case "rm":
