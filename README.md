@@ -24,10 +24,34 @@ Set the environment variables:
 
 # Usage
 
+List buckets:
+
     s3 ls
+
+List keys in a bucket under a prefix:
+
+    s3 ls s3://bucket/prefix
+
+Download all the contents (recursively) under the path to local:
+
     s3 get s3://bucket/path
+
+Cat (stream to stdout) all the contents under the path:
+
     s3 cat s3://bucket/path | grep needle
+
+Synchronise localpath to an s3 bucket:
+
     s3 sync localpath s3://bucket/path
-    s3 sync s3://bucket/path
+
+Synchronise an s3 bucket to localpath:
+
+    s3 sync s3://bucket/path localpath
+
+Synchronise an s3 bucket to another s3 bucket:
+
     s3 sync s3://bucket1/path s3://bucket2/otherpath
+
+Recursively remove all keys under a path:
+
     s3 rm s3://bucket/path
