@@ -473,7 +473,8 @@ Options:
 	if conn == nil {
 		auth, err := aws.EnvAuth()
 		if err != nil {
-			panic(err.Error())
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(-1)
 		}
 		region, err := getRegion()
 		if err != nil {
