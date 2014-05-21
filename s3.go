@@ -41,7 +41,7 @@ func listBuckets(conn *s3.S3) {
 		log.Fatal(err.Error())
 	}
 	for _, b := range data.Buckets {
-		fmt.Fprintln(out, b.Name)
+		fmt.Fprintf(out, "s3://%s/\n", b.Name)
 	}
 }
 

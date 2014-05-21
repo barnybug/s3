@@ -71,7 +71,7 @@ func (s *S) TestLsBuckets(c *C) {
 
 	run(s.s3, []string{"s3", "ls"})
 
-	c.Assert(s.out.String(), Equals, "bucket1\nbucket2\n")
+	c.Assert(s.out.String(), Equals, "s3://bucket1/\ns3://bucket2/\n")
 }
 
 var GetListResultDump1 = `
