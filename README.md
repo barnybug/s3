@@ -9,6 +9,7 @@ Swiss army pen-knife for Amazon S3.
 - cat: Cat keys
 - sync: Synchronise local to s3, s3 to local or s3 to s3
 - rm: Delete keys
+- rb: Delete buckets
 
 # Installation
 
@@ -55,3 +56,7 @@ Synchronise an s3 bucket to another s3 bucket:
 Recursively remove all keys under a path:
 
     s3 rm s3://bucket/path
+
+Delete a bucket:
+
+    s3 rb bucket

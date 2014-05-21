@@ -10,6 +10,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 )
 
 var reBucketPath = regexp.MustCompile("^(?:s3://)?([^/]+)/?(.*)$")
+var out io.Writer = os.Stdout
 
 func extractBucketPath(conn *s3.S3, url string) (*s3.Bucket, string) {
 	parts := reBucketPath.FindStringSubmatch(url)
@@ -39,7 +41,7 @@ func listBuckets(conn *s3.S3) {
 		log.Fatal(err.Error())
 	}
 	for _, b := range data.Buckets {
-		fmt.Println(b.Name)
+		fmt.Fprintln(out, b.Name)
 	}
 }
 
@@ -79,15 +81,15 @@ func listKeys(conn *s3.S3, urls []string) {
 	var count, totalSize int64
 	iterateKeys(conn, urls, func(file File) {
 		if quiet {
-			fmt.Println(file)
+			fmt.Fprintln(out, file)
 		} else {
-			fmt.Printf("%s\t%db\n", file, file.Size())
+			fmt.Fprintf(out, "%s\t%db\n", file, file.Size())
 		}
 		count += 1
 		totalSize += file.Size()
 	})
 	if !quiet {
-		fmt.Printf("\n%d files, %d bytes\n", count, totalSize)
+		fmt.Fprintf(out, "\n%d files, %d bytes\n", count, totalSize)
 	}
 }
 
@@ -118,7 +120,7 @@ func getKeys(conn *s3.S3, urls []string) {
 			log.Fatal(err.Error())
 		}
 		if !quiet {
-			fmt.Printf("%s -> %s (%d bytes)\n", file, fpath, nbytes)
+			fmt.Fprintf(out, "%s -> %s (%d bytes)\n", file, fpath, nbytes)
 		}
 	})
 }
@@ -138,7 +140,7 @@ func catKeys(conn *s3.S3, urls []string) {
 			}
 		}
 
-		_, err = io.Copy(os.Stdout, reader)
+		_, err = io.Copy(out, reader)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
@@ -153,7 +155,7 @@ func rmKeys(conn *s3.S3, urls []string) {
 	iterateKeys(conn, urls, func(file File) {
 		deleted += 1
 		if !quiet {
-			fmt.Printf("D %s\n", file)
+			fmt.Fprintf(out, "D %s\n", file)
 		}
 		switch t := file.(type) {
 		case *S3File:
@@ -192,15 +194,25 @@ func rmKeys(conn *s3.S3, urls []string) {
 	summary(0, deleted, 0, 0, took)
 }
 
+func rmBuckets(conn *s3.S3, urls []string) {
+	for _, url := range urls {
+		b, _ := extractBucketPath(conn, url)
+		err := b.DelBucket()
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+	}
+}
+
 func summary(added, deleted, updated, unchanged int, took time.Duration) {
 	rate := float64(added+deleted+updated) / took.Seconds()
 
 	if dryRun {
-		fmt.Println("-- summary (dry-run) --")
+		fmt.Fprintln(out, "-- summary (dry-run) --")
 	} else {
-		fmt.Println("-- summary --")
+		fmt.Fprintln(out, "-- summary --")
 	}
-	fmt.Printf(`%d added %d deleted %d updated %d unchanged
+	fmt.Fprintf(out, `%d added %d deleted %d updated %d unchanged
 took: %s (%.1f ops/s)
 
 `, added, deleted, updated, unchanged, took, rate)
@@ -220,7 +232,7 @@ func putKeys(conn *s3.S3, urls []string) {
 		defer reader.Close()
 
 		if !quiet {
-			fmt.Printf("A %s\n", file)
+			fmt.Fprintf(out, "A %s\n", file)
 		}
 		err = dfs.Create(file)
 		if err != nil {
@@ -266,7 +278,7 @@ func processAction(action Action, fs2 Filesystem) {
 	switch action.Action {
 	case "create":
 		if !quiet {
-			fmt.Printf("A %s\n", action.File.Relative())
+			fmt.Fprintf(out, "A %s\n", action.File.Relative())
 		}
 		if dryRun {
 			return
@@ -277,7 +289,7 @@ func processAction(action Action, fs2 Filesystem) {
 		}
 	case "delete":
 		if !quiet {
-			fmt.Printf("D %s\n", action.File.Relative())
+			fmt.Fprintf(out, "D %s\n", action.File.Relative())
 		}
 		if dryRun {
 			return
@@ -288,7 +300,7 @@ func processAction(action Action, fs2 Filesystem) {
 		}
 	case "update":
 		if !quiet {
-			fmt.Printf("U %s\n", action.File.Relative())
+			fmt.Fprintf(out, "U %s\n", action.File.Relative())
 		}
 		if dryRun {
 			return
@@ -348,7 +360,6 @@ func syncFiles(conn *s3.S3, urls []string) {
 			}
 			f2 = <-ch2
 		} else if f1.Size() != f2.Size() || bytes.Compare(f1.MD5(), f2.MD5()) != 0 {
-			// fmt.Println(f1.Name(), f2.Name(), f1.Size(), f2.Size(), f1.MD5(), f2.MD5())
 			q <- Action{"update", f1}
 			updated += 1
 			f1 = <-ch1
@@ -375,6 +386,7 @@ var (
 	public   bool
 	quiet    bool
 	acl      string
+	region   string
 )
 
 var ValidACLs = map[string]bool{
@@ -392,13 +404,33 @@ var minArgs = map[string]int{
 	"get":  1,
 	"ls":   0,
 	"put":  2,
+	"rb":   1,
 	"rm":   1,
 	"sync": 2,
 }
 
-func main() {
+func getRegion() (aws.Region, error) {
+	// pick up from environment variable
+	if region == "" {
+		region = os.Getenv("AWS_DEFAULT_REGION")
+	}
+	if region == "" {
+		region = os.Getenv("EC2_REGION")
+	}
+	if region == "" {
+		region = "us-east-1"
+	}
+	for _, r := range aws.Regions {
+		if region == r.Name {
+			return r, nil
+		}
+	}
+	return aws.Region{}, errors.New("Region not found")
+}
 
-	flag.Usage = func() {
+func run(conn *s3.S3, args []string) {
+	fs := flag.NewFlagSet("xyz", flag.ContinueOnError)
+	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [source...] [destination]
 
 Commands:
@@ -406,70 +438,84 @@ Commands:
 	get	Download keys
 	ls	List buckets or keys
 	put 	Upload files
+	rb	Remove bucket
 	rm	Delete keys
 	sync	Synchronise local to s3, s3 to s3 or s3 to local
 
 Options:
 `)
-		flag.PrintDefaults()
+		fs.PrintDefaults()
 	}
-	flag.IntVar(&parallel, "p", 32, "number of parallel operations to run")
-	flag.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
-	flag.BoolVar(&delete, "delete", false, "delete extraneous files from destination (sync)")
-	flag.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
-	flag.BoolVar(&quiet, "q", false, "quieter (less verbose) output")
-	flag.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
+	fs.IntVar(&parallel, "p", 32, "number of parallel operations to run")
+	fs.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
+	fs.BoolVar(&delete, "delete", false, "delete extraneous files from destination (sync)")
+	fs.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
+	fs.BoolVar(&quiet, "q", false, "quieter (less verbose) output")
+	fs.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
+	fs.StringVar(&region, "region", "", "set region, without environment variables AWS_DEFAULT_REGION or EC2_REGION are checked, and otherwise defaults to us-east-1")
 
-	if len(os.Args) < 2 {
-		flag.Usage()
+	if len(args) < 2 {
+		fs.Usage()
 		os.Exit(-1)
 	}
 
-	command := os.Args[1]
+	command := args[1]
 	// pop out the command argument
-	os.Args = append(os.Args[0:1], os.Args[2:]...)
-	flag.Parse()
+	fs.Parse(args[2:])
 	if public {
 		acl = "public-read"
 	}
 	if acl != "" && !ValidACLs[acl] {
-		fmt.Println("-acl should be one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
+		fmt.Fprintln(os.Stderr, "-acl should be one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
 		os.Exit(-1)
 	}
 
-	auth, err := aws.EnvAuth()
-	if err != nil {
-		panic(err.Error())
+	if conn == nil {
+		auth, err := aws.EnvAuth()
+		if err != nil {
+			panic(err.Error())
+		}
+		region, err := getRegion()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Region not found")
+			os.Exit(-1)
+		}
+		conn = s3.New(auth, region)
 	}
-	conn := s3.New(auth, aws.EUWest)
 
 	if _, ok := minArgs[command]; !ok {
-		flag.Usage()
+		fs.Usage()
 		os.Exit(-1)
 	}
 
-	if len(flag.Args()) < minArgs[command] {
-		fmt.Println("More arguments required\n")
-		flag.Usage()
+	if len(fs.Args()) < minArgs[command] {
+		fmt.Fprintln(os.Stderr, "More arguments required\n")
+		fs.Usage()
 		os.Exit(-1)
 	}
 
 	switch command {
 	case "cat":
-		catKeys(conn, flag.Args())
+		catKeys(conn, fs.Args())
 	case "get":
-		getKeys(conn, flag.Args())
+		getKeys(conn, fs.Args())
 	case "ls":
-		if len(flag.Args()) < 1 {
+		if len(fs.Args()) < 1 {
 			listBuckets(conn)
 		} else {
-			listKeys(conn, flag.Args())
+			listKeys(conn, fs.Args())
 		}
 	case "put":
-		putKeys(conn, flag.Args())
+		putKeys(conn, fs.Args())
 	case "sync":
-		syncFiles(conn, flag.Args())
+		syncFiles(conn, fs.Args())
 	case "rm":
-		rmKeys(conn, flag.Args())
+		rmKeys(conn, fs.Args())
+	case "rb":
+		rmBuckets(conn, fs.Args())
 	}
+}
+
+func main() {
+	run(nil, os.Args)
 }
