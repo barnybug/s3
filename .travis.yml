@@ -6,4 +6,4 @@ go:
  - tip
 
 script:
- - make all
+ - make testdeps all
