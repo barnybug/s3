@@ -218,6 +218,15 @@ took: %s (%.1f ops/s)
 `, added, deleted, updated, unchanged, took, rate)
 }
 
+func putBuckets(conn *s3.S3, urls []string) {
+	for _, url := range urls {
+		err := conn.Bucket(url).PutBucket(s3.ACL(acl))
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+	}
+}
+
 func putKeys(conn *s3.S3, urls []string) {
 	sources := urls[:len(urls)-1]
 	destination := urls[len(urls)-1]
@@ -403,6 +412,7 @@ var minArgs = map[string]int{
 	"cat":  1,
 	"get":  1,
 	"ls":   0,
+	"mb":   1,
 	"put":  2,
 	"rb":   1,
 	"rm":   1,
@@ -437,6 +447,7 @@ Commands:
 	cat	Cat key contents
 	get	Download keys
 	ls	List buckets or keys
+	mb 	Create bucket
 	put 	Upload files
 	rb	Remove bucket
 	rm	Delete keys
@@ -506,6 +517,8 @@ Options:
 		} else {
 			listKeys(conn, fs.Args())
 		}
+	case "mb":
+		putBuckets(conn, fs.Args())
 	case "put":
 		putKeys(conn, fs.Args())
 	case "sync":
