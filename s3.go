@@ -439,7 +439,7 @@ func getRegion() (aws.Region, error) {
 }
 
 func run(conn *s3.S3, args []string) {
-	fs := flag.NewFlagSet("xyz", flag.ContinueOnError)
+	fs := flag.NewFlagSet("s3", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [source...] [destination]
 

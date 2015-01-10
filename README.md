@@ -25,8 +25,7 @@ Unzip the .zip file you've downloaded, and you can run s3 from there:
 
 However, if you do want to build from source, you'll need go 1.2 installed, then:
 
-    git clone https://github.com/barnybug/s3
-    make all
+    go get github.com/barnybug/s3
 
 # Setup
 

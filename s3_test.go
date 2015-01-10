@@ -146,12 +146,11 @@ func (s *S) TestLsKeys(c *C) {
 }
 
 func (s *S) TestCat(c *C) {
-	parallel = 1
 	testServer.Response(200, nil, GetListResultDump1)
 	testServer.Response(200, nil, "abcd")
 	testServer.Response(200, nil, "efghi")
 
-	run(s.s3, []string{"s3", "cat", "s3://bucket/"})
+	run(s.s3, []string{"s3", "cat", "-p=1", "s3://bucket/"})
 
 	c.Assert(s.out.String(), Equals, "abcdefghi")
 }
@@ -223,7 +222,7 @@ func (s *S) TestSyncLocalToS3(c *C) {
 
 	setupFiles1()
 
-	run(s.s3, []string{"s3", "sync", "folder1", "s3://bucket/"})
+	run(s.s3, []string{"s3", "sync", "-p=1", "folder1", "s3://bucket/"})
 
 	req := testServer.WaitRequest()
 	c.Assert(req.Method, Equals, "GET")
@@ -239,17 +238,17 @@ func (s *S) TestSyncLocalToS3Deletes(c *C) {
 
 	setupFiles1()
 
-	run(s.s3, []string{"s3", "sync", "-delete", "folder1", "s3://bucket/"})
+	run(s.s3, []string{"s3", "sync", "-p=1", "-delete", "folder1", "s3://bucket/"})
 
 	req := testServer.WaitRequest()
 	c.Assert(req.Method, Equals, "GET")
 	req = testServer.WaitRequest()
+	c.Assert(req.Method, Equals, "DELETE")
+	req = testServer.WaitRequest()
+	c.Assert(req.Method, Equals, "DELETE")
+	req = testServer.WaitRequest()
 	c.Assert(req.Method, Equals, "PUT")
 	c.Assert(req.URL.Path, Equals, "/bucket/xyz")
-	req = testServer.WaitRequest()
-	c.Assert(req.Method, Equals, "DELETE")
-	req = testServer.WaitRequest()
-	c.Assert(req.Method, Equals, "DELETE")
 }
 
 func (s *S) TestSyncS3ToLocal(c *C) {
