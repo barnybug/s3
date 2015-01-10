@@ -332,7 +332,10 @@ func syncFiles(conn *s3.S3, urls []string) {
 	fs1 := getFilesystem(conn, url1)
 	fs2 := getFilesystem(conn, url2)
 	ch1 := fs1.Files()
+	f1 := <-ch1
+
 	ch2 := fs2.Files()
+	f2 := <-ch2
 
 	// create pool for processing
 	wg := sync.WaitGroup{}
@@ -347,8 +350,6 @@ func syncFiles(conn *s3.S3, urls []string) {
 		}()
 	}
 
-	f1 := <-ch1
-	f2 := <-ch2
 	var added, deleted, updated, unchanged int
 	for {
 		// iterate files in fs1 and fs2

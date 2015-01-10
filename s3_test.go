@@ -275,20 +275,20 @@ func (s *S) TestSyncS3ToLocal(c *C) {
 }
 
 func (s *S) TestSyncS3ToS3(c *C) {
-	testServer.Response(200, nil, GetListResultDump1)
 	testServer.Response(200, nil, GetListResultDump2)
+	testServer.Response(200, nil, GetListResultDump1)
 	testServer.Response(200, nil, "abcd")
 	testServer.Response(200, nil, "")
 	testServer.Response(200, nil, "")
 
-	run(s.s3, []string{"s3", "sync", "-p", "1", "-delete", "s3://bucket/", "s3://bucket2/"})
+	run(s.s3, []string{"s3", "sync", "-p=1", "-delete", "s3://bucket/", "s3://bucket2/"})
 
 	req := testServer.WaitRequest()
 	c.Assert(req.Method, Equals, "GET")
-	c.Assert(req.URL.Path, Equals, "/bucket2/")
+	c.Assert(req.URL.Path, Equals, "/bucket/")
 	req = testServer.WaitRequest()
 	c.Assert(req.Method, Equals, "GET")
-	c.Assert(req.URL.Path, Equals, "/bucket/")
+	c.Assert(req.URL.Path, Equals, "/bucket2/")
 	req = testServer.WaitRequest()
 	c.Assert(req.Method, Equals, "GET")
 	c.Assert(req.URL.Path, Equals, "/bucket/Leo")
