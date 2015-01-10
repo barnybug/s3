@@ -146,6 +146,7 @@ func (s *S) TestLsKeys(c *C) {
 }
 
 func (s *S) TestCat(c *C) {
+	parallel = 1
 	testServer.Response(200, nil, GetListResultDump1)
 	testServer.Response(200, nil, "abcd")
 	testServer.Response(200, nil, "efghi")
