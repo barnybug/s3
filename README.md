@@ -1,7 +1,6 @@
 # s3
 
 [![Build Status](https://secure.travis-ci.org/barnybug/s3.png)](http://travis-ci.org/barnybug/s3)
-[![Gobuild Download](http://gobuild.io/badge/github.com/barnybug/s3/download.png)](http://gobuild.io/github.com/barnybug/s3)
 
 Swiss army pen-knife for Amazon S3.
 
@@ -15,15 +14,21 @@ Swiss army pen-knife for Amazon S3.
 
 # Installation
 
-Installation is super-easy (there's no need to install anything), just go to
-[gobuild.io](http://gobuild.io/download/github.com/barnybug/s3) and the s3 binary will be built on demand for your platform (Linux, Mac or Windows):
-http://gobuild.io/download/github.com/barnybug/s3
+Installation is super-easy, there's no need to install anything, just download
+the self-contained binary from the github releases page (builds are available
+for Linux, Mac or Windows and 32-bit or 64-bit):
+https://github.com/barnybug/s3/releases/
 
-Unzip the .zip file you've downloaded, and you can run s3 from there:
+Rename and make the download executable:
 
-    ./s3 -help
+    $ mv s3-my-platform s3; chmod +x s3
 
-However, if you do want to build from source, you'll need go 1.2 installed, then:
+And you're ready to go:
+
+    $ ./s3 -h
+
+Alternatively you can instead build from source, you'll need go 1.2 installed,
+then:
 
     go get github.com/barnybug/s3
 
