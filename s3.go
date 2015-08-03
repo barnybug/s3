@@ -261,6 +261,7 @@ type File interface {
 	Reader() (io.ReadCloser, error)
 	Delete() error
 	String() string
+	IsDirectory() bool
 }
 
 type Filesystem interface {

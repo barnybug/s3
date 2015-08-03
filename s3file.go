@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/mitchellh/goamz/s3"
 )
@@ -31,6 +32,10 @@ func (self *S3File) Relative() string {
 
 func (self *S3File) Size() int64 {
 	return self.key.Size
+}
+
+func (self *S3File) IsDirectory() bool {
+	return strings.HasSuffix(self.path, "/") && self.key.Size == 0
 }
 
 func (self *S3File) MD5() []byte {

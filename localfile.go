@@ -58,17 +58,22 @@ func (self *LocalFilesystem) Create(src File) error {
 	}
 	defer reader.Close()
 	fullpath := filepath.Join(self.path, src.Relative())
-	dirpath := filepath.Dir(fullpath)
-	err = os.MkdirAll(dirpath, 0777)
-	if err != nil {
-		return err
+	if src.IsDirectory() {
+		err = os.MkdirAll(fullpath, 0777)
+	} else {
+		// create containing directory
+		dirpath := filepath.Dir(fullpath)
+		err = os.MkdirAll(dirpath, 0777)
+		if err != nil {
+			return err
+		}
+		writer, err := os.Create(fullpath)
+		if err != nil {
+			return err
+		}
+		defer writer.Close()
+		_, err = io.Copy(writer, reader)
 	}
-	writer, err := os.Create(fullpath)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	_, err = io.Copy(writer, reader)
 	return err
 }
 
@@ -90,6 +95,10 @@ func (self *LocalFile) Relative() string {
 
 func (self *LocalFile) Size() int64 {
 	return self.info.Size()
+}
+
+func (self *LocalFile) IsDirectory() bool {
+	return false
 }
 
 func (self *LocalFile) MD5() []byte {
