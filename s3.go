@@ -295,7 +295,11 @@ func processAction(action Action, fs2 Filesystem) {
 		}
 		err := fs2.Create(action.File)
 		if err != nil {
-			log.Fatal(err)
+			if ignoreErrors {
+				fmt.Fprintf(out, "E %s: %s\n", action.File.Relative(), err)
+			} else {
+				log.Fatal(err)
+			}
 		}
 	case "delete":
 		if !quiet {
@@ -391,13 +395,14 @@ func syncFiles(conn *s3.S3, urls []string) {
 }
 
 var (
-	parallel int
-	dryRun   bool
-	delete   bool
-	public   bool
-	quiet    bool
-	acl      string
-	region   string
+	parallel     int
+	dryRun       bool
+	delete       bool
+	public       bool
+	quiet        bool
+	ignoreErrors bool
+	acl          string
+	region       string
 )
 
 var ValidACLs = map[string]bool{
@@ -463,6 +468,7 @@ Options:
 	fs.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
 	fs.BoolVar(&delete, "delete", false, "delete extraneous files from destination (sync)")
 	fs.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
+	fs.BoolVar(&ignoreErrors, "ignore-errors", false, "ignore errors writing files")
 	fs.BoolVar(&quiet, "q", false, "quieter (less verbose) output")
 	fs.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
 	fs.StringVar(&region, "region", "", "set region, without environment variables AWS_DEFAULT_REGION or EC2_REGION are checked, and otherwise defaults to us-east-1")
