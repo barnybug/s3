@@ -26,4 +26,4 @@ release:
 	GOOS=windows GOARCH=386 go build -o release/s3-windows-386.exe $(package)
 	GOOS=windows GOARCH=amd64 go build -o release/s3-windows-amd64.exe $(package)
 	goupx release/s3-linux-amd64
-	upx release/s3-linux-386 release/s3-linux-arm release/s3-windows-386.exe release/s3-windows-amd64.exe
+	upx release/s3-linux-386 release/s3-linux-arm release/s3-windows-386.exe
