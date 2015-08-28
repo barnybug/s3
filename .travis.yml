@@ -1,11 +1,22 @@
 language: go
 go:
- - 1.1
- - 1.2
- - 1.3
- - 1.4
- - release
- - tip
-
+- 1.5
+sudo: required
+before_script:
+- sudo apt-get -y install upx-ucl
 script:
- - make testdeps all
+- make all
+deploy:
+  provider: releases
+  api_key:
+    secure: ogxurLU+Ak33qEYRZItJRBHj8TP7VTXjEiAmCBkVvatkFH6nnewfcLy3UliAnuu+8wp0YycYLyBmO+Zu+ZFLY3a9SN34yov/J6MvaSokoHgZZNzTvZsHf36+WYFI8mqBdeIXBuEj4qbdeOlP21LZjJA6SiIJjEyaXhGWn1zpN1k=
+  file:
+  - release/s3-linux-386
+  - release/s3-linux-amd64
+  - release/s3-linux-arm
+  - release/s3-darwin-amd64
+  - release/s3-windows-386.exe
+  - release/s3-windows-amd64.exe
+  on:
+    repo: barnybug/s3
+    tags: true
