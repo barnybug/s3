@@ -2,7 +2,7 @@ package = github.com/barnybug/s3
 
 .PHONY: release
 
-all: deps testdeps test release
+default: install
 
 test:
 	go test ./...
@@ -17,7 +17,7 @@ deps:
 testdeps:
 	go get -d -v github.com/motain/gocheck
 
-release:
+release: deps testdeps test
 	mkdir -p release
 	GOOS=linux GOARCH=386 go build -o release/s3-linux-386 $(package)
 	GOOS=linux GOARCH=amd64 go build -o release/s3-linux-amd64 $(package)
