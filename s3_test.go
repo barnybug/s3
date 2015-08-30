@@ -274,6 +274,27 @@ func (s *S) TestSyncS3ToLocal(c *C) {
 	c.Assert(files, DeepEquals, []string{"Nelson", "Neo"})
 }
 
+func (s *S) TestSyncS3ToLocalEmpty(c *C) {
+	testServer.Response(200, nil, GetListResultDump1)
+	testServer.Response(200, nil, "")
+	testServer.Response(200, nil, "")
+	testServer.Response(200, nil, "")
+
+	run(s.s3, []string{"s3", "sync", "-p", "1", "s3://bucket/", "folder1"})
+
+	req := testServer.WaitRequest()
+	c.Assert(req.Method, Equals, "GET")
+	req = testServer.WaitRequest()
+	c.Assert(req.Method, Equals, "GET")
+	c.Assert(req.URL.Path, Equals, "/bucket/Nelson")
+	req = testServer.WaitRequest()
+	c.Assert(req.Method, Equals, "GET")
+	c.Assert(req.URL.Path, Equals, "/bucket/Neo")
+
+	files := listFiles("folder1")
+	c.Assert(files, DeepEquals, []string{"Nelson", "Neo"})
+}
+
 func (s *S) TestSyncS3ToS3(c *C) {
 	testServer.Response(200, nil, GetListResultDump2)
 	testServer.Response(200, nil, GetListResultDump1)

@@ -39,6 +39,9 @@ func (self *LocalFilesystem) Files() <-chan File {
 	go func() {
 		defer close(ch)
 		fi, err := os.Stat(self.path)
+		if os.IsNotExist(err) {
+			return
+		}
 		if err != nil {
 			log.Fatal(err.Error())
 		}
