@@ -64,6 +64,10 @@ func (self *S3File) String() string {
 
 func (self *S3Filesystem) Files() <-chan File {
 	ch := make(chan File, 1000)
+	stripLen := strings.LastIndex(self.path, "/") + 1
+	if stripLen == -1 {
+		stripLen = 0
+	}
 	go func() {
 		defer close(ch)
 		truncated := true
@@ -76,7 +80,7 @@ func (self *S3Filesystem) Files() <-chan File {
 			last_key := ""
 			for _, c := range data.Contents {
 				key := c
-				relpath := key.Key[len(self.path):]
+				relpath := key.Key[stripLen:]
 				ch <- &S3File{self.bucket, &key, relpath, nil}
 				last_key = c.Key
 			}

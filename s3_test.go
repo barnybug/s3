@@ -137,6 +137,57 @@ var GetListResultDump2 = `
 </ListBucketResult>
 `
 
+var GetListResultDump3 = `
+<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01">
+  <Name>quotes</Name>
+  <Prefix>N</Prefix>
+  <IsTruncated>false</IsTruncated>
+  <Contents>
+    <Key>test/Nelson</Key>
+    <LastModified>2006-01-01T12:00:00.000Z</LastModified>
+    <ETag>&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;</ETag>
+    <Size>5</Size>
+    <StorageClass>STANDARD</StorageClass>
+    <Owner>
+      <ID>bcaf161ca5fb16fd081034f</ID>
+      <DisplayName>webfile</DisplayName>
+     </Owner>
+  </Contents>
+  <Contents>
+    <Key>test/Neo</Key>
+    <LastModified>2006-01-01T12:00:00.000Z</LastModified>
+    <ETag>&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;</ETag>
+    <Size>4</Size>
+    <StorageClass>STANDARD</StorageClass>
+     <Owner>
+      <ID>bcaf1ffd86a5fb16fd081034f</ID>
+      <DisplayName>webfile</DisplayName>
+    </Owner>
+ </Contents>
+</ListBucketResult>
+`
+
+var GetListResultDump4 = `
+<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01">
+  <Name>quotes</Name>
+  <Prefix>N</Prefix>
+  <IsTruncated>false</IsTruncated>
+  <Contents>
+    <Key>test/Nelson</Key>
+    <LastModified>2006-01-01T12:00:00.000Z</LastModified>
+    <ETag>&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;</ETag>
+    <Size>5</Size>
+    <StorageClass>STANDARD</StorageClass>
+    <Owner>
+      <ID>bcaf161ca5fb16fd081034f</ID>
+      <DisplayName>webfile</DisplayName>
+     </Owner>
+  </Contents>
+</ListBucketResult>
+`
+
 func (s *S) TestLsKeys(c *C) {
 	testServer.Response(200, nil, GetListResultDump1)
 
@@ -164,7 +215,7 @@ func listFiles(folder string) []string {
 	return files
 }
 
-func (s *S) TestGet(c *C) {
+func (s *S) TestGetWholeBucket(c *C) {
 	testServer.Response(200, nil, GetListResultDump1)
 	testServer.Response(200, nil, "abcd")
 	testServer.Response(200, nil, "efghi")
@@ -174,6 +225,41 @@ func (s *S) TestGet(c *C) {
 	files := listFiles(".")
 	c.Assert(files, DeepEquals, []string{"Nelson", "Neo"})
 	c.Assert(s.out.String(), Equals, "s3://bucket/Nelson -> Nelson (4 bytes)\ns3://bucket/Neo -> Neo (5 bytes)\n")
+}
+
+func (s *S) TestGetSubkeys(c *C) {
+	testServer.Response(200, nil, GetListResultDump3)
+	testServer.Response(200, nil, "abcd")
+	testServer.Response(200, nil, "efghi")
+
+	run(s.s3, []string{"s3", "get", "-p", "1", "s3://bucket/test/"})
+
+	files := listFiles(".")
+	c.Assert(files, DeepEquals, []string{"Nelson", "Neo"})
+	c.Assert(s.out.String(), Equals, "s3://bucket/test/Nelson -> Nelson (4 bytes)\ns3://bucket/test/Neo -> Neo (5 bytes)\n")
+}
+
+func (s *S) TestGetDir(c *C) {
+	testServer.Response(200, nil, GetListResultDump3)
+	testServer.Response(200, nil, "abcd")
+	testServer.Response(200, nil, "efghi")
+
+	run(s.s3, []string{"s3", "get", "-p", "1", "s3://bucket/test"})
+
+	files := listFiles(".")
+	c.Assert(files, DeepEquals, []string{"test"})
+	c.Assert(s.out.String(), Equals, "s3://bucket/test/Nelson -> test/Nelson (4 bytes)\ns3://bucket/test/Neo -> test/Neo (5 bytes)\n")
+}
+
+func (s *S) TestGetSingleKey(c *C) {
+	testServer.Response(200, nil, GetListResultDump4)
+	testServer.Response(200, nil, "abcd")
+
+	run(s.s3, []string{"s3", "get", "-p", "1", "s3://bucket/test/Nelson"})
+
+	files := listFiles(".")
+	c.Assert(files, DeepEquals, []string{"Nelson"})
+	c.Assert(s.out.String(), Equals, "s3://bucket/test/Nelson -> Nelson (4 bytes)\n")
 }
 
 func (s *S) TestPut(c *C) {
