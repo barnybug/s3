@@ -6,22 +6,24 @@ import (
 	"io"
 	"log"
 	"mime"
-	"net/http"
 	"path/filepath"
 	"strings"
 
-	"github.com/mitchellh/goamz/s3"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 type S3Filesystem struct {
-	conn   *s3.S3
-	bucket *s3.Bucket
+	conn   S3er
+	bucket string
 	path   string
 }
 
 type S3File struct {
-	bucket *s3.Bucket
-	key    *s3.Key
+	conn   S3er
+	bucket string
+	object *s3.Object
 	path   string
 	md5    []byte
 }
@@ -31,35 +33,45 @@ func (self *S3File) Relative() string {
 }
 
 func (self *S3File) Size() int64 {
-	return self.key.Size
+	return *self.object.Size
 }
 
 func (self *S3File) IsDirectory() bool {
-	return strings.HasSuffix(self.path, "/") && self.key.Size == 0
+	return strings.HasSuffix(self.path, "/") && *self.object.Size == 0
 }
 
 func (self *S3File) MD5() []byte {
 	if self.md5 == nil {
-		v := self.key.ETag[1 : len(self.key.ETag)-1]
+		etag := *self.object.ETag
+		v := etag[1 : len(etag)-1]
 		self.md5, _ = hex.DecodeString(v)
 	}
 	return self.md5
 }
 
 func (self *S3File) Reader() (io.ReadCloser, error) {
-	resp, err := self.bucket.GetResponse(self.key.Key)
+	input := s3.GetObjectInput{
+		Bucket: aws.String(self.bucket),
+		Key:    self.object.Key,
+	}
+	output, err := self.conn.GetObject(&input)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, err
+	return output.Body, err
 }
 
 func (self *S3File) Delete() error {
-	return self.bucket.Del(self.key.Key)
+	input := s3.DeleteObjectInput{
+		Bucket: aws.String(self.bucket),
+		Key:    self.object.Key,
+	}
+	_, err := self.conn.DeleteObject(&input)
+	return err
 }
 
 func (self *S3File) String() string {
-	return fmt.Sprintf("s3://%s/%s", self.bucket.Name, self.key.Key)
+	return fmt.Sprintf("s3://%s/%s", self.bucket, *self.object.Key)
 }
 
 func (self *S3Filesystem) Files() <-chan File {
@@ -73,19 +85,26 @@ func (self *S3Filesystem) Files() <-chan File {
 		truncated := true
 		marker := ""
 		for truncated {
-			data, err := self.bucket.List(self.path, "", marker, 0)
+			input := s3.ListObjectsInput{
+				Bucket: aws.String(self.bucket),
+				Prefix: aws.String(self.path),
+				Marker: aws.String(marker),
+			}
+			output, err := self.conn.ListObjects(&input)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
 			last_key := ""
-			for _, c := range data.Contents {
+			for _, c := range output.Contents {
 				key := c
-				relpath := key.Key[stripLen:]
-				ch <- &S3File{self.bucket, &key, relpath, nil}
-				last_key = c.Key
+				relpath := (*key.Key)[stripLen:]
+				ch <- &S3File{self.conn, self.bucket, key, relpath, nil}
+				last_key = *c.Key
 			}
-			truncated = data.IsTruncated
-			marker = data.NextMarker
+			truncated = *output.IsTruncated
+			if output.NextMarker != nil {
+				marker = *output.NextMarker
+			}
 			if marker == "" {
 				// Response may not include NextMarker.
 				marker = last_key
@@ -104,45 +123,51 @@ func guessMimeType(filename string) string {
 }
 
 func (self *S3Filesystem) Create(src File) error {
-	var reader io.ReadCloser
-	headers := http.Header{}
-	perm := s3.Private
-	if acl != "" {
-		perm = s3.ACL(acl)
+	fullpath := filepath.Join(self.path, src.Relative())
+	input := s3manager.UploadInput{
+		ACL:    aws.String(acl),
+		Bucket: aws.String(self.bucket),
+		Key:    aws.String(fullpath),
 	}
 
 	switch t := src.(type) {
 	case *S3File:
 		// special case for S3File to preserve header information
-		resp, err := t.bucket.GetResponse(t.key.Key)
+		get_object_input := s3.GetObjectInput{
+			Bucket: aws.String(self.bucket),
+			Key:    t.object.Key,
+		}
+		output, err := self.conn.GetObject(&get_object_input)
 		if err != nil {
 			return err
 		}
-		reader = resp.Body
-		defer reader.Close()
+		defer output.Body.Close()
+		input.Body = output.Body
 		// transfer existing headers across
-		headers["Content-Type"] = []string{resp.Header.Get("Content-Type")}
-		headers["Last-Modified"] = []string{resp.Header.Get("Last-Modified")}
-		headers["x-amz-storage-class"] = []string{t.key.StorageClass}
-		if acl == "" {
-			// TODO: add "GET Object ACL" to goamz
-		}
+		input.ContentType = output.ContentType
+		// input.LastModified = output.LastModified
+		input.StorageClass = output.StorageClass
 	default:
-		var err error
-		reader, err = src.Reader()
+		reader, err := src.Reader()
 		if err != nil {
 			return err
 		}
+		input.Body = reader
 		defer reader.Close()
-		headers["Content-Type"] = []string{guessMimeType(src.Relative())}
+		input.ContentType = aws.String(guessMimeType(src.Relative()))
 	}
 
-	fullpath := filepath.Join(self.path, src.Relative())
-	err := self.bucket.PutReaderHeader(fullpath, reader, src.Size(), headers, perm)
+	u := s3manager.NewUploader(nil)
+	_, err := u.Upload(&input)
 	return err
 }
 
 func (self *S3Filesystem) Delete(path string) error {
 	fullpath := filepath.Join(self.path, path)
-	return self.bucket.Del(fullpath)
+	input := s3.DeleteObjectInput{
+		Bucket: aws.String(self.bucket),
+		Key:    aws.String(fullpath),
+	}
+	_, err := self.conn.DeleteObject(&input)
+	return err
 }

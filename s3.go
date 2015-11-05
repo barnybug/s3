@@ -10,7 +10,6 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,30 +21,29 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mitchellh/goamz/aws"
-	"github.com/mitchellh/goamz/s3"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 var reBucketPath = regexp.MustCompile("^(?:s3://)?([^/]+)/?(.*)$")
 var out io.Writer = os.Stdout
 
-func extractBucketPath(conn *s3.S3, url string) (*s3.Bucket, string) {
+func extractBucketPath(url string) (string, string) {
 	parts := reBucketPath.FindStringSubmatch(url)
-	b := conn.Bucket(parts[1])
-	return b, parts[2]
+	return parts[1], parts[2]
 }
 
-func listBuckets(conn *s3.S3) {
-	data, err := conn.ListBuckets()
+func listBuckets(conn S3er) {
+	output, err := conn.ListBuckets(nil)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	for _, b := range data.Buckets {
-		fmt.Fprintf(out, "s3://%s/\n", b.Name)
+	for _, b := range output.Buckets {
+		fmt.Fprintf(out, "s3://%s/\n", *b.Name)
 	}
 }
 
-func iterateKeys(conn *s3.S3, urls []string, callback func(file File)) {
+func iterateKeys(conn S3er, urls []string, callback func(file File)) {
 	for _, url := range urls {
 		fs := getFilesystem(conn, url)
 		ch := fs.Files()
@@ -55,7 +53,7 @@ func iterateKeys(conn *s3.S3, urls []string, callback func(file File)) {
 	}
 }
 
-func iterateKeysParallel(conn *s3.S3, urls []string, callback func(file File)) {
+func iterateKeysParallel(conn S3er, urls []string, callback func(file File)) {
 	// create pool for processing
 	wg := sync.WaitGroup{}
 	q := make(chan File, 1000)
@@ -77,7 +75,7 @@ func iterateKeysParallel(conn *s3.S3, urls []string, callback func(file File)) {
 	wg.Wait()
 }
 
-func listKeys(conn *s3.S3, urls []string) {
+func listKeys(conn S3er, urls []string) {
 	var count, totalSize int64
 	iterateKeys(conn, urls, func(file File) {
 		if quiet {
@@ -93,7 +91,7 @@ func listKeys(conn *s3.S3, urls []string) {
 	}
 }
 
-func getKeys(conn *s3.S3, urls []string) {
+func getKeys(conn S3er, urls []string) {
 	iterateKeysParallel(conn, urls, func(file File) {
 		reader, err := file.Reader()
 		if err != nil {
@@ -125,7 +123,7 @@ func getKeys(conn *s3.S3, urls []string) {
 	})
 }
 
-func catKeys(conn *s3.S3, urls []string) {
+func catKeys(conn S3er, urls []string) {
 	iterateKeysParallel(conn, urls, func(file File) {
 		reader, err := file.Reader()
 		if err != nil {
@@ -186,9 +184,22 @@ func grepKeys(conn *s3.S3, args []string) {
 	})
 }
 
-func rmKeys(conn *s3.S3, urls []string) {
-	batch := make([]string, 0, 1000)
-	var bucket *s3.Bucket
+func deleteBatch(conn S3er, bucket string, batch []*s3.ObjectIdentifier) {
+	if !dryRun {
+		deleteRequest := s3.Delete{
+			Objects: batch,
+		}
+		input := s3.DeleteObjectsInput{
+			Bucket: aws.String(bucket),
+			Delete: &deleteRequest,
+		}
+		conn.DeleteObjects(&input)
+	}
+}
+
+func rmKeys(conn S3er, urls []string) {
+	batch := make([]*s3.ObjectIdentifier, 0, 1000)
+	var bucket string
 	start := time.Now()
 	var deleted int
 	iterateKeys(conn, urls, func(file File) {
@@ -199,19 +210,15 @@ func rmKeys(conn *s3.S3, urls []string) {
 		switch t := file.(type) {
 		case *S3File:
 			// optimize as a batch delete
-			if bucket != nil && t.bucket != bucket && len(batch) > 0 {
-				if !dryRun {
-					bucket.MultiDel(batch)
-				}
+			if t.bucket != bucket && len(batch) > 0 {
+				deleteBatch(conn, bucket, batch)
 				batch = batch[:0]
 			}
 			bucket = t.bucket
-			batch = append(batch, t.key.Key)
+			obj := s3.ObjectIdentifier{Key: t.object.Key}
+			batch = append(batch, &obj)
 			if len(batch) == 1000 {
-				if !dryRun {
-					// send batch delete
-					bucket.MultiDel(batch)
-				}
+				deleteBatch(conn, bucket, batch)
 				batch = batch[:0]
 			}
 
@@ -224,19 +231,18 @@ func rmKeys(conn *s3.S3, urls []string) {
 
 	// final batch
 	if len(batch) > 0 {
-		if !dryRun {
-			bucket.MultiDel(batch)
-		}
+		deleteBatch(conn, bucket, batch)
 	}
 	end := time.Now()
 	took := end.Sub(start)
 	summary(0, deleted, 0, 0, took)
 }
 
-func rmBuckets(conn *s3.S3, urls []string) {
+func rmBuckets(conn S3er, urls []string) {
 	for _, url := range urls {
-		b, _ := extractBucketPath(conn, url)
-		err := b.DelBucket()
+		bucket, _ := extractBucketPath(url)
+		input := s3.DeleteBucketInput{Bucket: aws.String(bucket)}
+		_, err := conn.DeleteBucket(&input)
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
@@ -257,16 +263,20 @@ took: %s (%.1f ops/s)
 `, added, deleted, updated, unchanged, took, rate)
 }
 
-func putBuckets(conn *s3.S3, urls []string) {
+func putBuckets(conn S3er, urls []string) {
 	for _, url := range urls {
-		err := conn.Bucket(url).PutBucket(s3.ACL(acl))
+		input := s3.PutBucketAclInput{
+			ACL:    aws.String(acl),
+			Bucket: aws.String(url),
+		}
+		_, err := conn.PutBucketAcl(&input)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
 	}
 }
 
-func putKeys(conn *s3.S3, urls []string) {
+func putKeys(conn S3er, urls []string) {
 	sources := urls[:len(urls)-1]
 	destination := urls[len(urls)-1]
 	start := time.Now()
@@ -309,9 +319,9 @@ type Filesystem interface {
 	Delete(path string) error
 }
 
-func getFilesystem(conn *s3.S3, url string) Filesystem {
+func getFilesystem(conn S3er, url string) Filesystem {
 	if strings.HasPrefix(url, "s3:") {
-		bucket, prefix := extractBucketPath(conn, url)
+		bucket, prefix := extractBucketPath(url)
 		return &S3Filesystem{conn: conn, bucket: bucket, path: prefix}
 	} else {
 		return &LocalFilesystem{path: url}
@@ -365,7 +375,7 @@ func processAction(action Action, fs2 Filesystem) {
 	}
 }
 
-func syncFiles(conn *s3.S3, urls []string) {
+func syncFiles(conn S3er, urls []string) {
 	if len(urls) != 2 {
 		// TODO: support multiple sources -> single destination
 		panic("Unsupported")
@@ -466,26 +476,7 @@ var minArgs = map[string]int{
 	"sync": 2,
 }
 
-func getRegion() (aws.Region, error) {
-	// pick up from environment variable
-	if region == "" {
-		region = os.Getenv("AWS_DEFAULT_REGION")
-	}
-	if region == "" {
-		region = os.Getenv("EC2_REGION")
-	}
-	if region == "" {
-		region = "us-east-1"
-	}
-	for _, r := range aws.Regions {
-		if region == r.Name {
-			return r, nil
-		}
-	}
-	return aws.Region{}, errors.New("Region not found")
-}
-
-func run(conn *s3.S3, args []string) {
+func run(conn S3er, args []string) {
 	fs := flag.NewFlagSet("s3", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [source...] [destination]
@@ -531,17 +522,8 @@ Options:
 	}
 
 	if conn == nil {
-		auth, err := aws.EnvAuth()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(-1)
-		}
-		region, err := getRegion()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Region not found")
-			os.Exit(-1)
-		}
-		conn = s3.New(auth, region)
+		config := aws.Config{}
+		conn = s3.New(&config)
 	}
 
 	if _, ok := minArgs[command]; !ok {
