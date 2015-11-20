@@ -264,11 +264,11 @@ took: %s (%.1f ops/s)
 
 func putBuckets(conn S3er, urls []string) {
 	for _, url := range urls {
-		input := s3.PutBucketAclInput{
+		input := s3.CreateBucketInput{
 			ACL:    aws.String(acl),
 			Bucket: aws.String(url),
 		}
-		_, err := conn.PutBucketAcl(&input)
+		_, err := conn.CreateBucket(&input)
 		if err != nil {
 			log.Fatal(err.Error())
 		}

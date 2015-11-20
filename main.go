@@ -1,13 +1,13 @@
 package s3
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/codegangsta/cli"
 )
 
 var (
@@ -31,97 +31,194 @@ var ValidACLs = map[string]bool{
 	"log-delivery-write":        true,
 }
 
-var minArgs = map[string]int{
-	"cat":  1,
-	"get":  1,
-	"ls":   0,
-	"mb":   1,
-	"put":  2,
-	"rb":   1,
-	"rm":   1,
-	"sync": 2,
+func validACL() bool {
+	if acl != "" && !ValidACLs[acl] {
+		fmt.Fprintln(os.Stderr, "acl should be one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
+		return false
+	}
+	return true
 }
 
-func Run(conn S3er, args []string) {
-	fs := flag.NewFlagSet("s3", flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Usage: s3 COMMAND [source...] [destination]
-
-Commands:
-	cat	Cat key contents
-	get	Download keys
-	ls	List buckets or keys
-	mb 	Create bucket
-	put 	Upload files
-	rb	Remove bucket
-	rm	Delete keys
-	sync	Synchronise local to s3, s3 to s3 or s3 to local
-
-Options:
-`)
-		fs.PrintDefaults()
-	}
-	fs.IntVar(&parallel, "p", 32, "number of parallel operations to run")
-	fs.BoolVar(&dryRun, "n", false, "dry-run, no actions taken")
-	fs.BoolVar(&delete, "delete", false, "delete extraneous files from destination (sync)")
-	fs.BoolVar(&public, "P", false, "shortcut to set acl to public-read")
-	fs.BoolVar(&ignoreErrors, "ignore-errors", false, "ignore errors writing files")
-	fs.BoolVar(&quiet, "q", false, "quieter (less verbose) output")
-	fs.StringVar(&acl, "acl", "", "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
-	fs.StringVar(&region, "region", "", "set region, without environment variables AWS_DEFAULT_REGION or EC2_REGION are checked, and otherwise defaults to us-east-1")
-
-	if len(args) < 2 {
-		fs.Usage()
-		os.Exit(-1)
-	}
-
-	command := args[1]
-	// pop out the command argument
-	fs.Parse(args[2:])
-	if public {
-		acl = "public-read"
-	}
-	if acl != "" && !ValidACLs[acl] {
-		fmt.Fprintln(os.Stderr, "-acl should be one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write")
-		os.Exit(-1)
-	}
+func Main(conn S3er, args []string) int {
+	exitCode := 0
 
 	if conn == nil {
 		config := aws.Config{}
 		conn = s3.New(session.New(), &config)
 	}
 
-	if _, ok := minArgs[command]; !ok {
-		fs.Usage()
-		os.Exit(-1)
+	commonFlags := []cli.Flag{
+		cli.IntFlag{
+			Name:        "p",
+			Value:       32,
+			Usage:       "number of parallel operations to run",
+			Destination: &parallel,
+		},
+		cli.BoolFlag{
+			Name:        "n",
+			Usage:       "dry-run, no actions taken",
+			Destination: &dryRun,
+		},
+		cli.BoolFlag{
+			Name:        "ignore-errors",
+			Usage:       "",
+			Destination: &ignoreErrors,
+		},
+		cli.BoolFlag{
+			Name:        "q",
+			Usage:       "",
+			Destination: &quiet,
+		},
+		cli.StringFlag{
+			Name:        "region",
+			Usage:       "set region, without environment variables AWS_DEFAULT_REGION or EC2_REGION are checked, and otherwise defaults to us-east-1",
+			Destination: &region,
+		},
 	}
 
-	if len(fs.Args()) < minArgs[command] {
-		fmt.Fprintln(os.Stderr, "More arguments required\n")
-		fs.Usage()
-		os.Exit(-1)
+	aclFlag := cli.StringFlag{
+		Name:        "acl",
+		Usage:       "set acl to one of: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control, log-delivery-write",
+		Destination: &acl,
+	}
+	publicFlag := cli.BoolFlag{
+		Name:        "public, P",
+		Usage:       "",
+		Destination: &public,
+	}
+	deleteFlag := cli.BoolFlag{
+		Name:        "delete",
+		Usage:       "delete extraneous files from destination",
+		Destination: &delete,
 	}
 
-	switch command {
-	case "cat":
-		catKeys(conn, fs.Args())
-	case "get":
-		getKeys(conn, fs.Args())
-	case "ls":
-		if len(fs.Args()) < 1 {
-			listBuckets(conn)
-		} else {
-			listKeys(conn, fs.Args())
-		}
-	case "mb":
-		putBuckets(conn, fs.Args())
-	case "put":
-		putKeys(conn, fs.Args())
-	case "sync":
-		syncFiles(conn, fs.Args())
-	case "rm":
-		rmKeys(conn, fs.Args())
-	case "rb":
-		rmBuckets(conn, fs.Args())
+	app := cli.NewApp()
+	app.Name = "s3"
+	app.Usage = "S3 utility knife"
+	app.Version = "0.0.1"
+	app.Flags = commonFlags
+	app.Commands = []cli.Command{
+		{
+			Name:      "cat",
+			Usage:     "Cat key contents",
+			ArgsUsage: "key ...",
+			Flags:     commonFlags,
+			Action: func(c *cli.Context) {
+				if len(c.Args()) == 0 {
+					cli.ShowCommandHelp(c, "cat")
+					exitCode = 1
+					return
+				}
+				catKeys(conn, c.Args())
+			},
+		},
+		{
+			Name:      "get",
+			Usage:     "Download keys",
+			ArgsUsage: "key ...",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) == 0 {
+					cli.ShowCommandHelp(c, "get")
+					exitCode = 1
+					return
+				}
+				getKeys(conn, c.Args())
+			},
+		},
+		{
+			Name:      "ls",
+			Usage:     "List buckets or keys",
+			ArgsUsage: "[bucket]",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) < 1 {
+					listBuckets(conn)
+				} else {
+					listKeys(conn, c.Args())
+				}
+			},
+		},
+		{
+			Name:      "mb",
+			Usage:     "Create bucket",
+			ArgsUsage: "bucket",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) != 1 {
+					cli.ShowCommandHelp(c, "mb")
+					exitCode = 1
+					return
+				}
+				putBuckets(conn, c.Args())
+			},
+		},
+		{
+			Name:      "put",
+			Usage:     "Upload files",
+			ArgsUsage: "source [source ...] dest",
+			Flags:     []cli.Flag{aclFlag, publicFlag},
+			Action: func(c *cli.Context) {
+				if len(c.Args()) < 2 {
+					cli.ShowCommandHelp(c, "put")
+					exitCode = 1
+					return
+				}
+				if public {
+					acl = "public-read"
+				}
+				if !validACL() {
+					exitCode = 1
+					return
+				}
+				putKeys(conn, c.Args())
+			},
+		},
+		{
+			Name:      "rb",
+			Usage:     "Remove bucket(s)",
+			ArgsUsage: "bucket ...",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) == 0 {
+					cli.ShowCommandHelp(c, "rb")
+					exitCode = 1
+					return
+				}
+				rmBuckets(conn, c.Args())
+			},
+		},
+		{
+			Name:      "rm",
+			Usage:     "Remove keys",
+			ArgsUsage: "key ...",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) == 0 {
+					cli.ShowCommandHelp(c, "rm")
+					exitCode = 1
+					return
+				}
+				rmKeys(conn, c.Args())
+			},
+		},
+		{
+			Name:      "sync",
+			Usage:     "Synchronise local to s3, s3 to s3 or s3 to local",
+			ArgsUsage: "source dest",
+			Flags:     []cli.Flag{aclFlag, publicFlag, deleteFlag},
+			Action: func(c *cli.Context) {
+				if len(c.Args()) != 2 {
+					cli.ShowCommandHelp(c, "sync")
+					exitCode = 1
+					return
+				}
+				if public {
+					acl = "public-read"
+				}
+				if !validACL() {
+					exitCode = 1
+					return
+				}
+				syncFiles(conn, c.Args())
+			},
+		},
 	}
+	app.Run(args)
+	return exitCode
 }
