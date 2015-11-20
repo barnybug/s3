@@ -1,4 +1,4 @@
-package = github.com/barnybug/s3
+package = github.com/barnybug/s3/cmd/s3
 
 .PHONY: release
 
@@ -8,7 +8,7 @@ test:
 	go test ./...
 
 install:
-	go install -v ./...
+	go install -v ./cmd/s3
 
 deps:
 	go get -d -v ./...
