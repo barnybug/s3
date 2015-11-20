@@ -126,6 +126,19 @@ func Main(conn S3er, args []string) int {
 			},
 		},
 		{
+			Name:      "grep",
+			Usage:     "Grep keys",
+			ArgsUsage: "string key ...",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) == 0 {
+					cli.ShowCommandHelp(c, "grep")
+					exitCode = 1
+					return
+				}
+				grepKeys(conn, c.Args())
+			},
+		},
+		{
 			Name:      "ls",
 			Usage:     "List buckets or keys",
 			ArgsUsage: "[bucket]",

@@ -144,7 +144,7 @@ func catKeys(conn S3er, urls []string) {
 	})
 }
 
-func grepKeys(conn *s3.S3, args []string) {
+func grepKeys(conn S3er, args []string) {
 	find := args[0]
 	findBytes := []byte(find)
 	urls := args[1:]
