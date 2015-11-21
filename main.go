@@ -15,7 +15,7 @@ import (
 var (
 	parallel     int
 	dryRun       bool
-	delete       bool
+	deleteExtra  bool
 	public       bool
 	quiet        bool
 	ignoreErrors bool
@@ -98,7 +98,7 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 	deleteFlag := cli.BoolFlag{
 		Name:        "delete",
 		Usage:       "delete extraneous files from destination",
-		Destination: &delete,
+		Destination: &deleteExtra,
 	}
 
 	app := cli.NewApp()

@@ -165,9 +165,9 @@ func grepKeys(conn s3iface.S3API, args []string) {
 
 		buf := make([]byte, 4096)
 		offset := 0
-		for n, err := reader.Read(buf[offset:]); n > 0 && err != nil; n, err = reader.Read(buf) {
+		for n, err := reader.Read(buf[offset:]); n > 0 && err == nil; n, err = reader.Read(buf) {
 			if bytes.Contains(buf, findBytes) {
-				fmt.Println(file.String())
+				fmt.Fprintln(out, file.String())
 				break
 			}
 			// handle overlapping matches - copy last N-1 bytes to start of next
@@ -178,7 +178,7 @@ func grepKeys(conn s3iface.S3API, args []string) {
 				copy(buf, buf[n-offset:])
 			}
 		}
-		if err != nil {
+		if err != nil && err != io.EOF {
 			log.Fatal(err.Error())
 		}
 	})
@@ -418,7 +418,7 @@ func syncFiles(conn s3iface.S3API, urls []string) {
 			added += 1
 			f1 = <-ch1
 		} else if f1 == nil || (f2 != nil && f1.Relative() > f2.Relative()) {
-			if delete {
+			if deleteExtra {
 				q <- Action{"delete", f2}
 				deleted += 1
 			}

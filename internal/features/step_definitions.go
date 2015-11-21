@@ -2,7 +2,6 @@ package features
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,6 +17,7 @@ import (
 var conn s3iface.S3API
 var testBuckets []string
 var out bytes.Buffer
+var lastExitCode int
 var tempDir string
 
 var replacer = strings.NewReplacer(`\n`, "\n", `\t`, "\t")
@@ -70,6 +70,17 @@ func cleanupBucket(bucket string) {
 	conn.DeleteBucket(&input)
 }
 
+func bucketExists(bucket string) bool {
+	input := awss3.ListBucketsInput{}
+	output, _ := conn.ListBuckets(&input)
+	for _, b := range output.Buckets {
+		if *b.Name == bucket {
+			return true
+		}
+	}
+	return false
+}
+
 func init() {
 	Before("", func() {
 		conn = s3.NewMockS3()
@@ -118,7 +129,7 @@ func init() {
 
 	When(`^I run "(.+?)"$`, func(s1 string) {
 		args := strings.Split(s1, " ")
-		s3.Main(conn, args, &out)
+		lastExitCode = s3.Main(conn, args, &out)
 	})
 
 	Then(`^local file "(.+?)" has contents "(.+?)"$`, func(filename string, exp string) {
@@ -148,8 +159,34 @@ func init() {
 		}
 	})
 
+	Then(`^the output contains "(.*?)"$`, func(exp string) {
+		// replace newlines
+		exp = replacer.Replace(exp)
+		act := string(out.Bytes())
+		if !strings.Contains(act, exp) {
+			T.Errorf("Output does not contain:\n%s\ngot:\n%s", exp, act)
+		}
+	})
+
+	Then(`^the exit code is (\d+?)$`, func(code int) {
+		if code != lastExitCode {
+			T.Errorf("Exit code expected:\n%d\ngot:\n%d", code, lastExitCode)
+		}
+	})
+
+	Then(`^the bucket "(.+?)" exists$`, func(bucket string) {
+		if !bucketExists(bucket) {
+			T.Errorf("Bucket %s does not exist", bucket)
+		}
+	})
+
+	Then(`^the bucket "(.+?)" does not exist$`, func(bucket string) {
+		if bucketExists(bucket) {
+			T.Errorf("Bucket %s exists", bucket)
+		}
+	})
+
 	Then(`^bucket "(.+?)" has key "(.+?)" with contents "(.+?)"$`, func(bucket string, key string, exp string) {
-		fmt.Println(bucket, key, exp)
 		input := awss3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(key),
@@ -170,4 +207,16 @@ func init() {
 			return
 		}
 	})
+
+	Then(`^bucket "(.+?)" key "(.+?)" does not exist$`, func(bucket string, key string) {
+		input := awss3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		}
+		_, err := conn.GetObject(&input)
+		if err == nil {
+			T.Errorf("Bucket %s Key %s exists", bucket, key)
+		}
+	})
+
 }

@@ -2,6 +2,7 @@ package s3
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 	"sort"
 	"strings"
@@ -38,7 +39,10 @@ func (self *MockS3) ListBuckets(*s3.ListBucketsInput) (*s3.ListBucketsOutput, er
 	return &output, nil
 }
 
-func (self *MockS3) DeleteBucket(*s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
+func (self *MockS3) DeleteBucket(input *s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
+	// TODO: throw error if it contains keys
+	// TODO: throw error if bucket doesn't exist
+	delete(self.data, *input.Bucket)
 	return &s3.DeleteBucketOutput{}, nil
 }
 
@@ -76,12 +80,15 @@ func (self *MockS3) ListObjects(input *s3.ListObjectsInput) (*s3.ListObjectsOutp
 
 func (self *MockS3) GetObject(input *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
 	bucket := self.data[*input.Bucket]
-	object := bucket[*input.Key]
-	body := ioutil.NopCloser(bytes.NewReader(object))
-	output := s3.GetObjectOutput{
-		Body: body,
+	if object, ok := bucket[*input.Key]; ok {
+		body := ioutil.NopCloser(bytes.NewReader(object))
+		output := s3.GetObjectOutput{
+			Body: body,
+		}
+		return &output, nil
+	} else {
+		return nil, errors.New("missing key")
 	}
-	return &output, nil
 }
 
 func (self *MockS3) PutObject(input *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
@@ -99,11 +106,17 @@ func (self *MockS3) PutObjectRequest(input *s3.PutObjectInput) (*request.Request
 	return req, &s3.PutObjectOutput{}
 }
 
-func (self *MockS3) DeleteObjects(*s3.DeleteObjectsInput) (*s3.DeleteObjectsOutput, error) {
+func (self *MockS3) DeleteObjects(input *s3.DeleteObjectsInput) (*s3.DeleteObjectsOutput, error) {
+	bucket := self.data[*input.Bucket]
+	for _, id := range input.Delete.Objects {
+		delete(bucket, *id.Key)
+	}
 	return &s3.DeleteObjectsOutput{}, nil
 }
 
-func (self *MockS3) DeleteObject(*s3.DeleteObjectInput) (*s3.DeleteObjectOutput, error) {
+func (self *MockS3) DeleteObject(input *s3.DeleteObjectInput) (*s3.DeleteObjectOutput, error) {
+	bucket := self.data[*input.Bucket]
+	delete(bucket, *input.Key)
 	return &s3.DeleteObjectOutput{}, nil
 }
 
