@@ -13,7 +13,8 @@ Feature: ls command
 
   Scenario: I can list keys
   	Given I have bucket "s3.barnybug.github.com"
-    And bucket "s3.barnybug.github.com" has key "apple" containing "123"
-    And bucket "s3.barnybug.github.com" has key "banana" containing "123"
-    When I run "s3 ls s3://s3.barnybug.github.com/apple"
-    Then the output is "s3://s3.barnybug.github.com/apple\t3b\n\n1 files, 3 bytes\n"
+    And bucket "s3.barnybug.github.com" key "aardvark" contains "1"
+    And bucket "s3.barnybug.github.com" key "apple" contains "23"
+    And bucket "s3.barnybug.github.com" key "banana" contains "456"
+    When I run "s3 ls s3://s3.barnybug.github.com/a"
+    Then the output is "s3://s3.barnybug.github.com/aardvark\t1b\ns3://s3.barnybug.github.com/apple\t2b\n\n2 files, 3 bytes\n"

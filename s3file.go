@@ -11,17 +11,18 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 type S3Filesystem struct {
-	conn   S3er
+	conn   s3iface.S3API
 	bucket string
 	path   string
 }
 
 type S3File struct {
-	conn   S3er
+	conn   s3iface.S3API
 	bucket string
 	object *s3.Object
 	path   string
@@ -157,7 +158,7 @@ func (self *S3Filesystem) Create(src File) error {
 		input.ContentType = aws.String(guessMimeType(src.Relative()))
 	}
 
-	u := s3manager.NewUploader(nil)
+	u := s3manager.NewUploaderWithClient(self.conn)
 	_, err := u.Upload(&input)
 	return err
 }

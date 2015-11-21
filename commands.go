@@ -22,6 +22,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
 var reBucketPath = regexp.MustCompile("^(?:s3://)?([^/]+)/?(.*)$")
@@ -32,7 +33,7 @@ func extractBucketPath(url string) (string, string) {
 	return parts[1], parts[2]
 }
 
-func listBuckets(conn S3er) {
+func listBuckets(conn s3iface.S3API) {
 	output, err := conn.ListBuckets(nil)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -42,7 +43,7 @@ func listBuckets(conn S3er) {
 	}
 }
 
-func iterateKeys(conn S3er, urls []string, callback func(file File)) {
+func iterateKeys(conn s3iface.S3API, urls []string, callback func(file File)) {
 	for _, url := range urls {
 		fs := getFilesystem(conn, url)
 		ch := fs.Files()
@@ -52,7 +53,7 @@ func iterateKeys(conn S3er, urls []string, callback func(file File)) {
 	}
 }
 
-func iterateKeysParallel(conn S3er, urls []string, callback func(file File)) {
+func iterateKeysParallel(conn s3iface.S3API, urls []string, callback func(file File)) {
 	// create pool for processing
 	wg := sync.WaitGroup{}
 	q := make(chan File, 1000)
@@ -74,7 +75,7 @@ func iterateKeysParallel(conn S3er, urls []string, callback func(file File)) {
 	wg.Wait()
 }
 
-func listKeys(conn S3er, urls []string) {
+func listKeys(conn s3iface.S3API, urls []string) {
 	var count, totalSize int64
 	iterateKeys(conn, urls, func(file File) {
 		if quiet {
@@ -90,7 +91,7 @@ func listKeys(conn S3er, urls []string) {
 	}
 }
 
-func getKeys(conn S3er, urls []string) {
+func getKeys(conn s3iface.S3API, urls []string) {
 	iterateKeysParallel(conn, urls, func(file File) {
 		reader, err := file.Reader()
 		if err != nil {
@@ -122,7 +123,7 @@ func getKeys(conn S3er, urls []string) {
 	})
 }
 
-func catKeys(conn S3er, urls []string) {
+func catKeys(conn s3iface.S3API, urls []string) {
 	iterateKeysParallel(conn, urls, func(file File) {
 		reader, err := file.Reader()
 		if err != nil {
@@ -144,7 +145,7 @@ func catKeys(conn S3er, urls []string) {
 	})
 }
 
-func grepKeys(conn S3er, args []string) {
+func grepKeys(conn s3iface.S3API, args []string) {
 	find := args[0]
 	findBytes := []byte(find)
 	urls := args[1:]
@@ -183,7 +184,7 @@ func grepKeys(conn S3er, args []string) {
 	})
 }
 
-func deleteBatch(conn S3er, bucket string, batch []*s3.ObjectIdentifier) {
+func deleteBatch(conn s3iface.S3API, bucket string, batch []*s3.ObjectIdentifier) {
 	if !dryRun {
 		deleteRequest := s3.Delete{
 			Objects: batch,
@@ -196,7 +197,7 @@ func deleteBatch(conn S3er, bucket string, batch []*s3.ObjectIdentifier) {
 	}
 }
 
-func rmKeys(conn S3er, urls []string) {
+func rmKeys(conn s3iface.S3API, urls []string) {
 	batch := make([]*s3.ObjectIdentifier, 0, 1000)
 	var bucket string
 	start := time.Now()
@@ -237,7 +238,7 @@ func rmKeys(conn S3er, urls []string) {
 	summary(0, deleted, 0, 0, took)
 }
 
-func rmBuckets(conn S3er, urls []string) {
+func rmBuckets(conn s3iface.S3API, urls []string) {
 	for _, url := range urls {
 		bucket, _ := extractBucketPath(url)
 		input := s3.DeleteBucketInput{Bucket: aws.String(bucket)}
@@ -262,7 +263,7 @@ took: %s (%.1f ops/s)
 `, added, deleted, updated, unchanged, took, rate)
 }
 
-func putBuckets(conn S3er, urls []string) {
+func putBuckets(conn s3iface.S3API, urls []string) {
 	for _, url := range urls {
 		input := s3.CreateBucketInput{
 			ACL:    aws.String(acl),
@@ -275,7 +276,7 @@ func putBuckets(conn S3er, urls []string) {
 	}
 }
 
-func putKeys(conn S3er, urls []string) {
+func putKeys(conn s3iface.S3API, urls []string) {
 	sources := urls[:len(urls)-1]
 	destination := urls[len(urls)-1]
 	start := time.Now()
@@ -318,7 +319,7 @@ type Filesystem interface {
 	Delete(path string) error
 }
 
-func getFilesystem(conn S3er, url string) Filesystem {
+func getFilesystem(conn s3iface.S3API, url string) Filesystem {
 	if strings.HasPrefix(url, "s3:") {
 		bucket, prefix := extractBucketPath(url)
 		return &S3Filesystem{conn: conn, bucket: bucket, path: prefix}
@@ -374,7 +375,7 @@ func processAction(action Action, fs2 Filesystem) {
 	}
 }
 
-func syncFiles(conn S3er, urls []string) {
+func syncFiles(conn s3iface.S3API, urls []string) {
 	if len(urls) != 2 {
 		// TODO: support multiple sources -> single destination
 		panic("Unsupported")

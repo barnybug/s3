@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/codegangsta/cli"
 )
 
@@ -39,11 +40,11 @@ func validACL() bool {
 	return true
 }
 
-func Main(conn S3er, args []string, output io.Writer) int {
+func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 	out = output
 	exitCode := 0
 
-	getConnection := func(c *cli.Context) S3er {
+	getConnection := func(c *cli.Context) s3iface.S3API {
 		if conn == nil {
 			region := c.Parent().String("region")
 			config := aws.Config{
