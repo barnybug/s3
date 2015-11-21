@@ -3,7 +3,7 @@
 //
 //   https://github.com/barnybug/s3
 //
-// Copyright (c) 2014 Barnaby Gray
+// Copyright (c) 2015 Barnaby Gray
 
 package s3
 
@@ -12,7 +12,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path"
 	"regexp"
@@ -27,34 +26,41 @@ import (
 
 var reBucketPath = regexp.MustCompile("^(?:s3://)?([^/]+)/?(.*)$")
 var out io.Writer = os.Stdout
+var err io.Writer = os.Stderr
 
 func extractBucketPath(url string) (string, string) {
 	parts := reBucketPath.FindStringSubmatch(url)
 	return parts[1], parts[2]
 }
 
-func listBuckets(conn s3iface.S3API) {
+func listBuckets(conn s3iface.S3API) error {
 	output, err := conn.ListBuckets(nil)
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
 	for _, b := range output.Buckets {
 		fmt.Fprintf(out, "s3://%s/\n", *b.Name)
 	}
+	return nil
 }
 
-func iterateKeys(conn s3iface.S3API, urls []string, callback func(file File)) {
+func iterateKeys(conn s3iface.S3API, urls []string, callback func(file File) error) error {
 	for _, url := range urls {
 		fs := getFilesystem(conn, url)
 		ch := fs.Files()
 		for file := range ch {
-			callback(file)
+			err := callback(file)
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
-func iterateKeysParallel(conn s3iface.S3API, urls []string, callback func(file File)) {
+func iterateKeysParallel(conn s3iface.S3API, urls []string, callback func(file File) error) error {
 	// create pool for processing
+	var err error
 	wg := sync.WaitGroup{}
 	q := make(chan File, 1000)
 	for i := 0; i < parallel; i += 1 {
@@ -62,22 +68,28 @@ func iterateKeysParallel(conn s3iface.S3API, urls []string, callback func(file F
 		go func() {
 			defer wg.Done()
 			for key := range q {
-				callback(key)
+				e := callback(key)
+				if e != nil {
+					err = e
+					return
+				}
 			}
 		}()
 	}
 
-	iterateKeys(conn, urls, func(file File) {
+	iterateKeys(conn, urls, func(file File) error {
 		q <- file
+		return nil
 	})
 
 	close(q)
 	wg.Wait()
+	return err
 }
 
-func listKeys(conn s3iface.S3API, urls []string) {
+func listKeys(conn s3iface.S3API, urls []string) error {
 	var count, totalSize int64
-	iterateKeys(conn, urls, func(file File) {
+	err := iterateKeys(conn, urls, func(file File) error {
 		if quiet {
 			fmt.Fprintln(out, file)
 		} else {
@@ -85,17 +97,22 @@ func listKeys(conn s3iface.S3API, urls []string) {
 		}
 		count += 1
 		totalSize += file.Size()
+		return nil
 	})
+	if err != nil {
+		return err
+	}
 	if !quiet {
 		fmt.Fprintf(out, "\n%d files, %d bytes\n", count, totalSize)
 	}
+	return nil
 }
 
-func getKeys(conn s3iface.S3API, urls []string) {
-	iterateKeysParallel(conn, urls, func(file File) {
+func getKeys(conn s3iface.S3API, urls []string) error {
+	return iterateKeysParallel(conn, urls, func(file File) error {
 		reader, err := file.Reader()
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		defer reader.Close()
 
@@ -105,61 +122,61 @@ func getKeys(conn s3iface.S3API, urls []string) {
 		if dirpath != "." {
 			err = os.MkdirAll(dirpath, 0777)
 			if err != nil {
-				log.Fatal(err.Error())
+				return err
 			}
 		}
 
 		writer, err := os.Create(fpath)
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		nbytes, err := io.Copy(writer, reader)
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		if !quiet {
 			fmt.Fprintf(out, "%s -> %s (%d bytes)\n", file, fpath, nbytes)
 		}
+		return nil
 	})
 }
 
-func catKeys(conn s3iface.S3API, urls []string) {
-	iterateKeysParallel(conn, urls, func(file File) {
+func catKeys(conn s3iface.S3API, urls []string) error {
+	return iterateKeysParallel(conn, urls, func(file File) error {
 		reader, err := file.Reader()
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		defer reader.Close()
 
 		if strings.HasSuffix(file.String(), ".gz") {
 			reader, err = gzip.NewReader(reader)
 			if err != nil {
-				log.Fatal(err.Error())
+				return err
 			}
 		}
 
 		_, err = io.Copy(out, reader)
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
+		return nil
 	})
 }
 
-func grepKeys(conn s3iface.S3API, args []string) {
-	find := args[0]
+func grepKeys(conn s3iface.S3API, find string, urls []string) error {
 	findBytes := []byte(find)
-	urls := args[1:]
-	iterateKeysParallel(conn, urls, func(file File) {
+	return iterateKeysParallel(conn, urls, func(file File) error {
 		reader, err := file.Reader()
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		defer reader.Close()
 
 		if strings.HasSuffix(file.String(), ".gz") {
 			reader, err = gzip.NewReader(reader)
 			if err != nil {
-				log.Fatal(err.Error())
+				return err
 			}
 		}
 
@@ -179,12 +196,13 @@ func grepKeys(conn s3iface.S3API, args []string) {
 			}
 		}
 		if err != nil && err != io.EOF {
-			log.Fatal(err.Error())
+			return err
 		}
+		return nil
 	})
 }
 
-func deleteBatch(conn s3iface.S3API, bucket string, batch []*s3.ObjectIdentifier) {
+func deleteBatch(conn s3iface.S3API, bucket string, batch []*s3.ObjectIdentifier) error {
 	if !dryRun {
 		deleteRequest := s3.Delete{
 			Objects: batch,
@@ -193,16 +211,18 @@ func deleteBatch(conn s3iface.S3API, bucket string, batch []*s3.ObjectIdentifier
 			Bucket: aws.String(bucket),
 			Delete: &deleteRequest,
 		}
-		conn.DeleteObjects(&input)
+		_, err := conn.DeleteObjects(&input)
+		return err
 	}
+	return nil
 }
 
-func rmKeys(conn s3iface.S3API, urls []string) {
+func rmKeys(conn s3iface.S3API, urls []string) error {
 	batch := make([]*s3.ObjectIdentifier, 0, 1000)
 	var bucket string
 	start := time.Now()
 	var deleted int
-	iterateKeys(conn, urls, func(file File) {
+	err := iterateKeys(conn, urls, func(file File) error {
 		deleted += 1
 		if !quiet {
 			fmt.Fprintf(out, "D %s\n", file)
@@ -227,7 +247,11 @@ func rmKeys(conn s3iface.S3API, urls []string) {
 				file.Delete()
 			}
 		}
+		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	// final batch
 	if len(batch) > 0 {
@@ -236,17 +260,19 @@ func rmKeys(conn s3iface.S3API, urls []string) {
 	end := time.Now()
 	took := end.Sub(start)
 	summary(0, deleted, 0, 0, took)
+	return nil
 }
 
-func rmBuckets(conn s3iface.S3API, urls []string) {
-	for _, url := range urls {
-		bucket, _ := extractBucketPath(url)
+func rmBuckets(conn s3iface.S3API, buckets []string) error {
+	for _, name := range buckets {
+		bucket, _ := extractBucketPath(name)
 		input := s3.DeleteBucketInput{Bucket: aws.String(bucket)}
 		_, err := conn.DeleteBucket(&input)
 		if err != nil {
-			log.Fatalln(err.Error())
+			return err
 		}
 	}
+	return nil
 }
 
 func summary(added, deleted, updated, unchanged int, took time.Duration) {
@@ -263,29 +289,28 @@ took: %s (%.1f ops/s)
 `, added, deleted, updated, unchanged, took, rate)
 }
 
-func putBuckets(conn s3iface.S3API, urls []string) {
-	for _, url := range urls {
+func putBuckets(conn s3iface.S3API, buckets []string) error {
+	for _, bucket := range buckets {
 		input := s3.CreateBucketInput{
 			ACL:    aws.String(acl),
-			Bucket: aws.String(url),
+			Bucket: aws.String(bucket),
 		}
 		_, err := conn.CreateBucket(&input)
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 	}
+	return nil
 }
 
-func putKeys(conn s3iface.S3API, urls []string) {
-	sources := urls[:len(urls)-1]
-	destination := urls[len(urls)-1]
+func putKeys(conn s3iface.S3API, sources []string, destination string) error {
 	start := time.Now()
 	dfs := getFilesystem(conn, destination)
 	var added int
-	iterateKeysParallel(conn, sources, func(file File) {
+	err := iterateKeysParallel(conn, sources, func(file File) error {
 		reader, err := file.Reader()
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		defer reader.Close()
 
@@ -294,29 +319,18 @@ func putKeys(conn s3iface.S3API, urls []string) {
 		}
 		err = dfs.Create(file)
 		if err != nil {
-			log.Fatal(err.Error())
+			return err
 		}
 		added += 1
+		return nil
 	})
+	if err != nil {
+		return err
+	}
 	end := time.Now()
 	took := end.Sub(start)
 	summary(added, 0, 0, 0, took)
-}
-
-type File interface {
-	Relative() string
-	Size() int64
-	MD5() []byte
-	Reader() (io.ReadCloser, error)
-	Delete() error
-	String() string
-	IsDirectory() bool
-}
-
-type Filesystem interface {
-	Files() <-chan File
-	Create(src File) error
-	Delete(path string) error
+	return nil
 }
 
 func getFilesystem(conn s3iface.S3API, url string) Filesystem {
@@ -333,21 +347,21 @@ type Action struct {
 	File   File
 }
 
-func processAction(action Action, fs2 Filesystem) {
+func processAction(action Action, fs2 Filesystem) error {
 	switch action.Action {
 	case "create":
 		if !quiet {
 			fmt.Fprintf(out, "A %s\n", action.File.Relative())
 		}
 		if dryRun {
-			return
+			return nil
 		}
 		err := fs2.Create(action.File)
 		if err != nil {
 			if ignoreErrors {
 				fmt.Fprintf(out, "E %s: %s\n", action.File.Relative(), err)
 			} else {
-				log.Fatal(err)
+				return err
 			}
 		}
 	case "delete":
@@ -355,36 +369,31 @@ func processAction(action Action, fs2 Filesystem) {
 			fmt.Fprintf(out, "D %s\n", action.File.Relative())
 		}
 		if dryRun {
-			return
+			return nil
 		}
 		err := fs2.Delete(action.File.Relative())
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	case "update":
 		if !quiet {
 			fmt.Fprintf(out, "U %s\n", action.File.Relative())
 		}
 		if dryRun {
-			return
+			return nil
 		}
 		err := fs2.Create(action.File)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
+	return nil
 }
 
-func syncFiles(conn s3iface.S3API, urls []string) {
-	if len(urls) != 2 {
-		// TODO: support multiple sources -> single destination
-		panic("Unsupported")
-	}
-	url1 := urls[0]
-	url2 := urls[1]
+func syncFiles(conn s3iface.S3API, src, dest string) error {
 	start := time.Now()
-	fs1 := getFilesystem(conn, url1)
-	fs2 := getFilesystem(conn, url2)
+	fs1 := getFilesystem(conn, src)
+	fs2 := getFilesystem(conn, dest)
 	ch1 := fs1.Files()
 	f1 := <-ch1
 
@@ -441,4 +450,5 @@ func syncFiles(conn s3iface.S3API, urls []string) {
 	end := time.Now()
 	took := end.Sub(start)
 	summary(added, deleted, updated, unchanged, took)
+	return nil
 }

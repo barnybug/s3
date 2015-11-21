@@ -15,6 +15,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
+var (
+	ErrNoSuchBucket = errors.New("NoSuchBucket: The specified bucket does not exist")
+)
+
 type MockBucket map[string][]byte
 
 type MockS3 struct {
@@ -107,7 +111,11 @@ func (self *MockS3) PutObject(input *s3.PutObjectInput) (*s3.PutObjectOutput, er
 	self.Lock()
 	defer self.Unlock()
 	content, _ := ioutil.ReadAll(input.Body)
-	self.data[*input.Bucket][*input.Key] = content
+	if bucket, ok := self.data[*input.Bucket]; ok {
+		bucket[*input.Key] = content
+	} else {
+		return nil, ErrNoSuchBucket
+	}
 	return &s3.PutObjectOutput{}, nil
 }
 
@@ -117,8 +125,14 @@ func (self *MockS3) PutObjectRequest(input *s3.PutObjectInput) (*request.Request
 	// required for s3manager.Upload
 	// TODO: should only alter bucket on Send()
 	content, _ := ioutil.ReadAll(input.Body)
-	self.data[*input.Bucket][*input.Key] = content
 	req := request.New(aws.Config{}, metadata.ClientInfo{}, request.Handlers{}, nil, &request.Operation{}, nil, nil)
+	if bucket, ok := self.data[*input.Bucket]; ok {
+		bucket[*input.Key] = content
+	} else {
+		// pre-set the error on the request
+		req.Build()
+		req.Error = ErrNoSuchBucket
+	}
 	return req, &s3.PutObjectOutput{}
 }
 

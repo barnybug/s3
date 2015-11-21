@@ -44,6 +44,13 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 	out = output
 	exitCode := 0
 
+	checkErr := func(err error) {
+		if err != nil {
+			fmt.Printf("Error: %s\n", err)
+			exitCode = 1
+		}
+	}
+
 	getConnection := func(c *cli.Context) s3iface.S3API {
 		if conn == nil {
 			region := c.Parent().String("region")
@@ -119,7 +126,8 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				catKeys(conn, c.Args())
+				err := catKeys(conn, c.Args())
+				checkErr(err)
 			},
 		},
 		{
@@ -133,7 +141,8 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				getKeys(conn, c.Args())
+				err := getKeys(conn, c.Args())
+				checkErr(err)
 			},
 		},
 		{
@@ -147,7 +156,10 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				grepKeys(conn, c.Args())
+				find := c.Args().First()
+				urls := c.Args().Tail()
+				err := grepKeys(conn, find, urls)
+				checkErr(err)
 			},
 		},
 		{
@@ -155,13 +167,15 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 			Usage:     "List buckets or keys",
 			ArgsUsage: "[bucket]",
 			Action: func(c *cli.Context) {
+				var err error
 				if len(c.Args()) < 1 {
 					conn := getConnection(c)
-					listBuckets(conn)
+					err = listBuckets(conn)
 				} else {
 					conn := getConnection(c)
-					listKeys(conn, c.Args())
+					err = listKeys(conn, c.Args())
 				}
+				checkErr(err)
 			},
 		},
 		{
@@ -175,7 +189,8 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				putBuckets(conn, c.Args())
+				err := putBuckets(conn, c.Args())
+				checkErr(err)
 			},
 		},
 		{
@@ -197,7 +212,11 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				putKeys(conn, c.Args())
+				args := c.Args()
+				sources := args[:len(args)-1]
+				destination := args[len(args)-1]
+				err := putKeys(conn, sources, destination)
+				checkErr(err)
 			},
 		},
 		{
@@ -211,7 +230,8 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				rmBuckets(conn, c.Args())
+				err := rmBuckets(conn, c.Args())
+				checkErr(err)
 			},
 		},
 		{
@@ -225,7 +245,8 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				rmKeys(conn, c.Args())
+				err := rmKeys(conn, c.Args())
+				checkErr(err)
 			},
 		},
 		{
@@ -247,7 +268,8 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 					return
 				}
 				conn := getConnection(c)
-				syncFiles(conn, c.Args())
+				err := syncFiles(conn, c.Args()[0], c.Args()[1])
+				checkErr(err)
 			},
 		},
 	}
