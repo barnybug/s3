@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client/metadata"
@@ -17,6 +18,7 @@ import (
 type MockBucket map[string][]byte
 
 type MockS3 struct {
+	sync.RWMutex
 	// bucket: {key: value}
 	data map[string]MockBucket
 }
@@ -28,6 +30,8 @@ func NewMockS3() *MockS3 {
 }
 
 func (self *MockS3) ListBuckets(*s3.ListBucketsInput) (*s3.ListBucketsOutput, error) {
+	self.RLock()
+	defer self.RUnlock()
 	buckets := []*s3.Bucket{}
 	for name := range self.data {
 		bucket := s3.Bucket{Name: aws.String(name)}
@@ -40,6 +44,8 @@ func (self *MockS3) ListBuckets(*s3.ListBucketsInput) (*s3.ListBucketsOutput, er
 }
 
 func (self *MockS3) DeleteBucket(input *s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
+	self.Lock()
+	defer self.Unlock()
 	// TODO: throw error if it contains keys
 	// TODO: throw error if bucket doesn't exist
 	delete(self.data, *input.Bucket)
@@ -47,11 +53,15 @@ func (self *MockS3) DeleteBucket(input *s3.DeleteBucketInput) (*s3.DeleteBucketO
 }
 
 func (self *MockS3) CreateBucket(input *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
+	self.Lock()
+	defer self.Unlock()
 	self.data[*input.Bucket] = MockBucket{}
 	return &s3.CreateBucketOutput{}, nil
 }
 
 func (self *MockS3) ListObjects(input *s3.ListObjectsInput) (*s3.ListObjectsOutput, error) {
+	self.RLock()
+	defer self.RUnlock()
 	// TODO: implement error for missing bucket
 	bucket := self.data[*input.Bucket]
 	var keys []string
@@ -79,6 +89,8 @@ func (self *MockS3) ListObjects(input *s3.ListObjectsInput) (*s3.ListObjectsOutp
 }
 
 func (self *MockS3) GetObject(input *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
+	self.RLock()
+	defer self.RUnlock()
 	bucket := self.data[*input.Bucket]
 	if object, ok := bucket[*input.Key]; ok {
 		body := ioutil.NopCloser(bytes.NewReader(object))
@@ -92,12 +104,16 @@ func (self *MockS3) GetObject(input *s3.GetObjectInput) (*s3.GetObjectOutput, er
 }
 
 func (self *MockS3) PutObject(input *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
+	self.Lock()
+	defer self.Unlock()
 	content, _ := ioutil.ReadAll(input.Body)
 	self.data[*input.Bucket][*input.Key] = content
 	return &s3.PutObjectOutput{}, nil
 }
 
 func (self *MockS3) PutObjectRequest(input *s3.PutObjectInput) (*request.Request, *s3.PutObjectOutput) {
+	self.Lock()
+	defer self.Unlock()
 	// required for s3manager.Upload
 	// TODO: should only alter bucket on Send()
 	content, _ := ioutil.ReadAll(input.Body)
@@ -107,6 +123,8 @@ func (self *MockS3) PutObjectRequest(input *s3.PutObjectInput) (*request.Request
 }
 
 func (self *MockS3) DeleteObjects(input *s3.DeleteObjectsInput) (*s3.DeleteObjectsOutput, error) {
+	self.Lock()
+	defer self.Unlock()
 	bucket := self.data[*input.Bucket]
 	for _, id := range input.Delete.Objects {
 		delete(bucket, *id.Key)
@@ -115,6 +133,8 @@ func (self *MockS3) DeleteObjects(input *s3.DeleteObjectsInput) (*s3.DeleteObjec
 }
 
 func (self *MockS3) DeleteObject(input *s3.DeleteObjectInput) (*s3.DeleteObjectOutput, error) {
+	self.Lock()
+	defer self.Unlock()
 	bucket := self.data[*input.Bucket]
 	delete(bucket, *input.Key)
 	return &s3.DeleteObjectOutput{}, nil
