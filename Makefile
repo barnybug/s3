@@ -5,19 +5,18 @@ package = github.com/barnybug/s3/cmd/s3
 default: install
 
 test:
-	go test ./...
+	gucumber
 
 install:
 	go install -v ./cmd/s3
 
 deps:
 	go get -d -v ./...
-	go get github.com/pwaller/goupx/
 
-testdeps:
-	go get -d -v github.com/motain/gocheck
+build-deps:
+	go get github.com/lsegal/gucumber/cmd/gucumber
 
-release: deps testdeps test
+release: deps build-deps test
 	mkdir -p release
 	GOOS=linux GOARCH=386 go build -o release/s3-linux-386 $(package)
 	GOOS=linux GOARCH=amd64 go build -o release/s3-linux-amd64 $(package)

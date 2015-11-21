@@ -2,6 +2,7 @@ package s3
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -38,24 +39,23 @@ func validACL() bool {
 	return true
 }
 
-var conn S3er
-
-func getConnection(c *cli.Context) S3er {
-	if conn == nil {
-		region := c.String("region")
-		if region == "" {
-			region = "us-east-1"
-		}
-		config := aws.Config{
-			Region: aws.String(region),
-		}
-		conn = s3.New(session.New(), &config)
-	}
-	return conn
-}
-
-func Main(args []string) int {
+func Main(conn S3er, args []string, output io.Writer) int {
+	out = output
 	exitCode := 0
+
+	getConnection := func(c *cli.Context) S3er {
+		if conn == nil {
+			region := c.String("region")
+			if region == "" {
+				region = "us-east-1"
+			}
+			config := aws.Config{
+				Region: aws.String(region),
+			}
+			conn = s3.New(session.New(), &config)
+		}
+		return conn
+	}
 
 	commonFlags := []cli.Flag{
 		cli.IntFlag{
