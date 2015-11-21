@@ -45,10 +45,7 @@ func Main(conn S3er, args []string, output io.Writer) int {
 
 	getConnection := func(c *cli.Context) S3er {
 		if conn == nil {
-			region := c.String("region")
-			if region == "" {
-				region = "us-east-1"
-			}
+			region := c.Parent().String("region")
 			config := aws.Config{
 				Region: aws.String(region),
 			}
@@ -82,6 +79,7 @@ func Main(conn S3er, args []string, output io.Writer) int {
 		cli.StringFlag{
 			Name:   "region",
 			Usage:  "set region, otherwise environment variable AWS_REGION is checked, finally defaulting to us-east-1",
+			Value:  "us-east-1",
 			EnvVar: "AWS_REGION",
 		},
 	}
