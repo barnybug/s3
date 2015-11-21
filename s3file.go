@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"path/filepath"
 	"strings"
@@ -16,6 +15,7 @@ import (
 )
 
 type S3Filesystem struct {
+	err    error
 	conn   s3iface.S3API
 	bucket string
 	path   string
@@ -75,6 +75,10 @@ func (self *S3File) String() string {
 	return fmt.Sprintf("s3://%s/%s", self.bucket, *self.object.Key)
 }
 
+func (self *S3Filesystem) Error() error {
+	return self.err
+}
+
 func (self *S3Filesystem) Files() <-chan File {
 	ch := make(chan File, 1000)
 	stripLen := strings.LastIndex(self.path, "/") + 1
@@ -93,7 +97,8 @@ func (self *S3Filesystem) Files() <-chan File {
 			}
 			output, err := self.conn.ListObjects(&input)
 			if err != nil {
-				log.Fatal(err.Error())
+				self.err = err
+				return
 			}
 			last_key := ""
 			for _, c := range output.Contents {

@@ -66,8 +66,10 @@ func (self *MockS3) CreateBucket(input *s3.CreateBucketInput) (*s3.CreateBucketO
 func (self *MockS3) ListObjects(input *s3.ListObjectsInput) (*s3.ListObjectsOutput, error) {
 	self.RLock()
 	defer self.RUnlock()
-	// TODO: implement error for missing bucket
-	bucket := self.data[*input.Bucket]
+	bucket, ok := self.data[*input.Bucket]
+	if !ok {
+		return nil, ErrNoSuchBucket
+	}
 	var keys []string
 	for key := range bucket {
 		if strings.HasPrefix(key, *input.Prefix) {

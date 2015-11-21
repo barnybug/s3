@@ -10,6 +10,7 @@ package s3
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,6 +28,10 @@ import (
 var reBucketPath = regexp.MustCompile("^(?:s3://)?([^/]+)/?(.*)$")
 var out io.Writer = os.Stdout
 var err io.Writer = os.Stderr
+
+var (
+	ErrNotFound = errors.New("Not found")
+)
 
 func extractBucketPath(url string) (string, string) {
 	parts := reBucketPath.FindStringSubmatch(url)
@@ -54,6 +59,9 @@ func iterateKeys(conn s3iface.S3API, urls []string, callback func(file File) err
 				return err
 			}
 		}
+		if fs.Error() != nil {
+			return fs.Error()
+		}
 	}
 	return nil
 }
@@ -77,10 +85,13 @@ func iterateKeysParallel(conn s3iface.S3API, urls []string, callback func(file F
 		}()
 	}
 
-	iterateKeys(conn, urls, func(file File) error {
+	e := iterateKeys(conn, urls, func(file File) error {
 		q <- file
 		return nil
 	})
+	if e != nil {
+		return e
+	}
 
 	close(q)
 	wg.Wait()
@@ -109,7 +120,15 @@ func listKeys(conn s3iface.S3API, urls []string) error {
 }
 
 func getKeys(conn s3iface.S3API, urls []string) error {
-	return iterateKeysParallel(conn, urls, func(file File) error {
+	found := false
+	for _, url := range urls {
+		if !isS3Url(url) {
+			return errors.New("s3:// url required")
+		}
+	}
+
+	err := iterateKeysParallel(conn, urls, func(file File) error {
+		found = true
 		reader, err := file.Reader()
 		if err != nil {
 			return err
@@ -139,6 +158,10 @@ func getKeys(conn s3iface.S3API, urls []string) error {
 		}
 		return nil
 	})
+	if err == nil && !found {
+		err = ErrNotFound
+	}
+	return err
 }
 
 func catKeys(conn s3iface.S3API, urls []string) error {
@@ -305,9 +328,14 @@ func putBuckets(conn s3iface.S3API, buckets []string) error {
 
 func putKeys(conn s3iface.S3API, sources []string, destination string) error {
 	start := time.Now()
+	found := false
+	if !isS3Url(destination) {
+		return errors.New("s3:// url required for destination")
+	}
 	dfs := getFilesystem(conn, destination)
 	var added int
 	err := iterateKeysParallel(conn, sources, func(file File) error {
+		found = true
 		reader, err := file.Reader()
 		if err != nil {
 			return err
@@ -324,17 +352,25 @@ func putKeys(conn s3iface.S3API, sources []string, destination string) error {
 		added += 1
 		return nil
 	})
+	if err == nil && !found {
+		err = ErrNotFound
+	}
 	if err != nil {
 		return err
 	}
 	end := time.Now()
 	took := end.Sub(start)
 	summary(added, 0, 0, 0, took)
+
 	return nil
 }
 
+func isS3Url(url string) bool {
+	return strings.HasPrefix(url, "s3:")
+}
+
 func getFilesystem(conn s3iface.S3API, url string) Filesystem {
-	if strings.HasPrefix(url, "s3:") {
+	if isS3Url(url) {
 		bucket, prefix := extractBucketPath(url)
 		return &S3Filesystem{conn: conn, bucket: bucket, path: prefix}
 	} else {

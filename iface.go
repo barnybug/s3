@@ -16,4 +16,5 @@ type Filesystem interface {
 	Files() <-chan File
 	Create(src File) error
 	Delete(path string) error
+	Error() error
 }

@@ -10,28 +10,37 @@ import (
 )
 
 type LocalFilesystem struct {
+	err  error
 	path string
 }
 
-func scanFiles(ch chan<- File, fullpath string, relpath string) {
+func (self *LocalFilesystem) Error() error {
+	return self.err
+}
+
+func scanFiles(ch chan<- File, fullpath string, relpath string) error {
 	entries, err := ioutil.ReadDir(fullpath)
 	if os.IsNotExist(err) {
 		// this is fine - indicates no files are there
-		return
+		return nil
 	}
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
 	for _, entry := range entries {
 		f := filepath.Join(fullpath, entry.Name())
 		r := filepath.Join(relpath, entry.Name())
 		if entry.IsDir() {
 			// recurse
-			scanFiles(ch, f, r)
+			err := scanFiles(ch, f, r)
+			if err != nil {
+				return err
+			}
 		} else {
 			ch <- &LocalFile{entry, f, r, nil}
 		}
 	}
+	return nil
 }
 
 func (self *LocalFilesystem) Files() <-chan File {
@@ -46,7 +55,10 @@ func (self *LocalFilesystem) Files() <-chan File {
 			log.Fatal(err.Error())
 		}
 		if fi.IsDir() {
-			scanFiles(ch, self.path, "")
+			e := scanFiles(ch, self.path, "")
+			if e != nil {
+				self.err = e
+			}
 		} else {
 			ch <- &LocalFile{fi, self.path, self.path, nil}
 		}
