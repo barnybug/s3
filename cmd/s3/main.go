@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	exitCode := s3.Main(nil, os.Args)
+	exitCode := s3.Main(os.Args)
 	os.Exit(exitCode)
 }

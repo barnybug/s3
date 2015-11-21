@@ -18,7 +18,6 @@ var (
 	quiet        bool
 	ignoreErrors bool
 	acl          string
-	region       string
 )
 
 var ValidACLs = map[string]bool{
@@ -39,13 +38,24 @@ func validACL() bool {
 	return true
 }
 
-func Main(conn S3er, args []string) int {
-	exitCode := 0
+var conn S3er
 
+func getConnection(c *cli.Context) S3er {
 	if conn == nil {
-		config := aws.Config{}
+		region := c.String("region")
+		if region == "" {
+			region = "us-east-1"
+		}
+		config := aws.Config{
+			Region: aws.String(region),
+		}
 		conn = s3.New(session.New(), &config)
 	}
+	return conn
+}
+
+func Main(args []string) int {
+	exitCode := 0
 
 	commonFlags := []cli.Flag{
 		cli.IntFlag{
@@ -70,9 +80,9 @@ func Main(conn S3er, args []string) int {
 			Destination: &quiet,
 		},
 		cli.StringFlag{
-			Name:        "region",
-			Usage:       "set region, without environment variables AWS_DEFAULT_REGION or EC2_REGION are checked, and otherwise defaults to us-east-1",
-			Destination: &region,
+			Name:   "region",
+			Usage:  "set region, otherwise environment variable AWS_REGION is checked, finally defaulting to us-east-1",
+			EnvVar: "AWS_REGION",
 		},
 	}
 
@@ -109,6 +119,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				catKeys(conn, c.Args())
 			},
 		},
@@ -122,6 +133,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				getKeys(conn, c.Args())
 			},
 		},
@@ -135,6 +147,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				grepKeys(conn, c.Args())
 			},
 		},
@@ -144,8 +157,10 @@ func Main(conn S3er, args []string) int {
 			ArgsUsage: "[bucket]",
 			Action: func(c *cli.Context) {
 				if len(c.Args()) < 1 {
+					conn := getConnection(c)
 					listBuckets(conn)
 				} else {
+					conn := getConnection(c)
 					listKeys(conn, c.Args())
 				}
 			},
@@ -160,6 +175,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				putBuckets(conn, c.Args())
 			},
 		},
@@ -181,6 +197,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				putKeys(conn, c.Args())
 			},
 		},
@@ -194,6 +211,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				rmBuckets(conn, c.Args())
 			},
 		},
@@ -207,6 +225,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				rmKeys(conn, c.Args())
 			},
 		},
@@ -228,6 +247,7 @@ func Main(conn S3er, args []string) int {
 					exitCode = 1
 					return
 				}
+				conn := getConnection(c)
 				syncFiles(conn, c.Args())
 			},
 		},
