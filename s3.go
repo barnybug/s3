@@ -139,11 +139,11 @@ func (self *S3Filesystem) Create(src File) error {
 	switch t := src.(type) {
 	case *S3File:
 		// special case for S3File to preserve header information
-		get_object_input := s3.GetObjectInput{
-			Bucket: aws.String(self.bucket),
+		getObjectInput := s3.GetObjectInput{
+			Bucket: aws.String(t.bucket),
 			Key:    t.object.Key,
 		}
-		output, err := self.conn.GetObject(&get_object_input)
+		output, err := self.conn.GetObject(&getObjectInput)
 		if err != nil {
 			return err
 		}

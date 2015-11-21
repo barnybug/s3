@@ -2,10 +2,12 @@ package features
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	awss3 "github.com/aws/aws-sdk-go/service/s3"
@@ -81,6 +83,17 @@ func bucketExists(bucket string) bool {
 	return false
 }
 
+type threadSafeWriter struct {
+	io.Writer
+	sync.Mutex
+}
+
+func (t *threadSafeWriter) Write(p []byte) (n int, err error) {
+	t.Mutex.Lock()
+	defer t.Mutex.Unlock()
+	return t.Writer.Write(p)
+}
+
 func init() {
 	Before("", func() {
 		conn = s3.NewMockS3()
@@ -129,7 +142,8 @@ func init() {
 
 	When(`^I run "(.+?)"$`, func(s1 string) {
 		args := strings.Split(s1, " ")
-		lastExitCode = s3.Main(conn, args, &out)
+		o := threadSafeWriter{&out, sync.Mutex{}}
+		lastExitCode = s3.Main(conn, args, &o)
 	})
 
 	Then(`^local file "(.+?)" has contents "(.+?)"$`, func(filename string, exp string) {
