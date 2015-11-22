@@ -129,7 +129,12 @@ func guessMimeType(filename string) string {
 }
 
 func (self *S3Filesystem) Create(src File) error {
-	fullpath := filepath.Join(self.path, src.Relative())
+	var fullpath string
+	if self.path == "" || strings.HasSuffix(self.path, "/") {
+		fullpath = filepath.Join(self.path, src.Relative())
+	} else {
+		fullpath = self.path
+	}
 	input := s3manager.UploadInput{
 		ACL:    aws.String(acl),
 		Bucket: aws.String(self.bucket),

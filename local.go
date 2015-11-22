@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type LocalFilesystem struct {
@@ -45,6 +46,13 @@ func scanFiles(ch chan<- File, fullpath string, relpath string) error {
 
 func (self *LocalFilesystem) Files() <-chan File {
 	ch := make(chan File, 1000)
+
+	// use relative path to file or directory:
+	// path/to/file -> file
+	// parent/path -> path
+	// path/ -> ''
+	ps := strings.Split(self.path, "/")
+	relpath := ps[len(ps)-1]
 	go func() {
 		defer close(ch)
 		fi, err := os.Stat(self.path)
@@ -52,15 +60,16 @@ func (self *LocalFilesystem) Files() <-chan File {
 			return
 		}
 		if err != nil {
-			log.Fatal(err.Error())
+			self.err = err
+			return
 		}
 		if fi.IsDir() {
-			e := scanFiles(ch, self.path, "")
-			if e != nil {
-				self.err = e
+			err := scanFiles(ch, self.path, relpath)
+			if err != nil {
+				self.err = err
 			}
 		} else {
-			ch <- &LocalFile{fi, self.path, self.path, nil}
+			ch <- &LocalFile{fi, self.path, relpath, nil}
 		}
 	}()
 	return ch

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"strings"
 	"sync"
 
@@ -131,6 +132,18 @@ func init() {
 	})
 
 	Given(`^local file "(.+?)" contains "(.+?)"$`, func(filename string, content string) {
+		// create containing directory if necessary
+		dirname := path.Dir(filename)
+		if dirname != "" {
+			if _, err := os.Stat(dirname); os.IsNotExist(err) {
+				err := os.MkdirAll(dirname, 0755)
+				if err != nil {
+					T.Errorf("Couldn't create directory: %s\n%s", dirname, err)
+					return
+				}
+			}
+		}
+
 		file, err := os.Create(filename)
 		if err != nil {
 			T.Errorf("Couldn't create file: %s\n%s", filename, err)
