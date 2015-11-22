@@ -3,8 +3,8 @@ Feature: get command
 
   Scenario: I can get a file
   	Given I have bucket "s3.barnybug.github.com"
-    And bucket "s3.barnybug.github.com" key "key" contains "123"
-    When I run "s3 get s3://s3.barnybug.github.com/key"
+    And bucket "s3.barnybug.github.com" key "path/key" contains "123"
+    When I run "s3 get s3://s3.barnybug.github.com/path/key"
     Then local file "key" has contents "123"
 
   Scenario: I can get multiple files
@@ -23,6 +23,12 @@ Feature: get command
     When I run "s3 get s3://s3.barnybug.github.com/test"
     Then local file "test/aardvark" has contents "AARDVARK"
     And local file "test/apple" has contents "APPLE"
+
+  Scenario: I can get a directory relatively
+    Given I have bucket "s3.barnybug.github.com"
+    And bucket "s3.barnybug.github.com" key "test/aardvark" contains "AARDVARK"
+    When I run "s3 get s3://s3.barnybug.github.com/test/"
+    Then local file "aardvark" has contents "AARDVARK"
 
   Scenario: get from a non-existent bucket is an error
     When I run "s3 get s3://s3.barnybug.github.com/key"
