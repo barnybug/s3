@@ -21,6 +21,7 @@ var (
 	ignoreErrors bool
 	acl          string
 )
+var version string /* passed in by go build */
 
 var ValidACLs = map[string]bool{
 	"private":                   true,
@@ -111,8 +112,9 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 	app := cli.NewApp()
 	app.Name = "s3"
 	app.Usage = "S3 utility knife"
-	app.Version = "0.0.1"
+	app.Version = version
 	app.Flags = commonFlags
+	app.Writer = out
 	app.Commands = []cli.Command{
 		{
 			Name:      "cat",
