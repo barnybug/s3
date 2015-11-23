@@ -241,6 +241,11 @@ func deleteBatch(conn s3iface.S3API, bucket string, batch []*s3.ObjectIdentifier
 }
 
 func rmKeys(conn s3iface.S3API, urls []string) error {
+	for _, url := range urls {
+		if !isS3Url(url) {
+			return errors.New("Cowardly refusing to remove local files. Use rm.")
+		}
+	}
 	batch := make([]*s3.ObjectIdentifier, 0, 1000)
 	var bucket string
 	start := time.Now()

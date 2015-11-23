@@ -235,6 +235,17 @@ func init() {
 		}
 	})
 
+	Then(`^bucket "(.+?)" key "(.+?)" exists$`, func(bucket string, key string) {
+		input := awss3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		}
+		_, err := conn.GetObject(&input)
+		if err != nil {
+			T.Errorf("Bucket %s Key %s does not exist", bucket, key)
+		}
+	})
+
 	Then(`^bucket "(.+?)" key "(.+?)" does not exist$`, func(bucket string, key string) {
 		input := awss3.GetObjectInput{
 			Bucket: aws.String(bucket),

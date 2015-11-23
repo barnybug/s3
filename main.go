@@ -46,7 +46,7 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 
 	checkErr := func(err error) {
 		if err != nil {
-			fmt.Printf("Error: %s\n", err)
+			fmt.Fprintf(out, "Error: %s\n", err)
 			exitCode = 1
 		}
 	}
