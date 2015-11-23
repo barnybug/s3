@@ -30,7 +30,7 @@ var out io.Writer = os.Stdout
 var err io.Writer = os.Stderr
 
 var (
-	ErrNotFound = errors.New("Not found")
+	ErrNotFound = errors.New("No files found")
 )
 
 func extractBucketPath(url string) (string, string) {
@@ -50,10 +50,12 @@ func listBuckets(conn s3iface.S3API) error {
 }
 
 func iterateKeys(conn s3iface.S3API, urls []string, callback func(file File) error) error {
+	found := false
 	for _, url := range urls {
 		fs := getFilesystem(conn, url)
 		ch := fs.Files()
 		for file := range ch {
+			found = true
 			err := callback(file)
 			if err != nil {
 				return err
@@ -62,6 +64,9 @@ func iterateKeys(conn s3iface.S3API, urls []string, callback func(file File) err
 		if fs.Error() != nil {
 			return fs.Error()
 		}
+	}
+	if !found {
+		return ErrNotFound
 	}
 	return nil
 }
@@ -110,7 +115,7 @@ func listKeys(conn s3iface.S3API, urls []string) error {
 		totalSize += file.Size()
 		return nil
 	})
-	if err != nil {
+	if err != nil && err != ErrNotFound {
 		return err
 	}
 	if !quiet {
@@ -120,7 +125,6 @@ func listKeys(conn s3iface.S3API, urls []string) error {
 }
 
 func getKeys(conn s3iface.S3API, urls []string) error {
-	found := false
 	for _, url := range urls {
 		if !isS3Url(url) {
 			return errors.New("s3:// url required")
@@ -128,7 +132,6 @@ func getKeys(conn s3iface.S3API, urls []string) error {
 	}
 
 	err := iterateKeysParallel(conn, urls, func(file File) error {
-		found = true
 		reader, err := file.Reader()
 		if err != nil {
 			return err
@@ -158,9 +161,6 @@ func getKeys(conn s3iface.S3API, urls []string) error {
 		}
 		return nil
 	})
-	if err == nil && !found {
-		err = ErrNotFound
-	}
 	return err
 }
 
@@ -328,14 +328,12 @@ func putBuckets(conn s3iface.S3API, buckets []string) error {
 
 func putKeys(conn s3iface.S3API, sources []string, destination string) error {
 	start := time.Now()
-	found := false
 	if !isS3Url(destination) {
 		return errors.New("s3:// url required for destination")
 	}
 	dfs := getFilesystem(conn, destination)
 	var added int
 	err := iterateKeysParallel(conn, sources, func(file File) error {
-		found = true
 		reader, err := file.Reader()
 		if err != nil {
 			return err
@@ -352,9 +350,6 @@ func putKeys(conn s3iface.S3API, sources []string, destination string) error {
 		added += 1
 		return nil
 	})
-	if err == nil && !found {
-		err = ErrNotFound
-	}
 	if err != nil {
 		return err
 	}

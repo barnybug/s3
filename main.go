@@ -150,7 +150,7 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 			Usage:     "Grep keys",
 			ArgsUsage: "string key ...",
 			Action: func(c *cli.Context) {
-				if len(c.Args()) == 0 {
+				if len(c.Args()) < 2 {
 					cli.ShowCommandHelp(c, "grep")
 					exitCode = 1
 					return
