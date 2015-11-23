@@ -16,7 +16,9 @@ import (
 )
 
 var (
-	ErrNoSuchBucket = errors.New("NoSuchBucket: The specified bucket does not exist")
+	ErrNoSuchBucket  = errors.New("NoSuchBucket: The specified bucket does not exist")
+	ErrBucketExists  = errors.New("Bucket already exists")
+	ErrBucketHasKeys = errors.New("Bucket has keys so cannot be deleted")
 )
 
 type MockBucket map[string][]byte
@@ -50,15 +52,23 @@ func (self *MockS3) ListBuckets(*s3.ListBucketsInput) (*s3.ListBucketsOutput, er
 func (self *MockS3) DeleteBucket(input *s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
 	self.Lock()
 	defer self.Unlock()
-	// TODO: throw error if it contains keys
-	// TODO: throw error if bucket doesn't exist
-	delete(self.data, *input.Bucket)
-	return &s3.DeleteBucketOutput{}, nil
+	if bucket, exists := self.data[*input.Bucket]; exists {
+		if len(bucket) > 0 {
+			return nil, ErrBucketHasKeys
+		}
+		delete(self.data, *input.Bucket)
+		return &s3.DeleteBucketOutput{}, nil
+	} else {
+		return nil, ErrNoSuchBucket
+	}
 }
 
 func (self *MockS3) CreateBucket(input *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
 	self.Lock()
 	defer self.Unlock()
+	if _, exists := self.data[*input.Bucket]; exists {
+		return nil, ErrBucketExists
+	}
 	self.data[*input.Bucket] = MockBucket{}
 	return &s3.CreateBucketOutput{}, nil
 }
