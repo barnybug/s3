@@ -450,7 +450,16 @@ func syncFiles(conn s3iface.S3API, src, dest string) error {
 	}
 
 	var added, deleted, updated, unchanged int
+	var err error
 	for {
+		err = fs1.Error()
+		if err != nil {
+			break
+		}
+		err = fs2.Error()
+		if err != nil {
+			break
+		}
 		// iterate files in fs1 and fs2
 		// if f1 is nil and f2 is nil, we're done
 		// if f1 is nil or f1 < f2, create f1
@@ -482,6 +491,9 @@ func syncFiles(conn s3iface.S3API, src, dest string) error {
 
 	close(q)
 	wg.Wait()
+	if err != nil {
+		return err
+	}
 
 	end := time.Now()
 	took := end.Sub(start)
