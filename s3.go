@@ -100,21 +100,13 @@ func (self *S3Filesystem) Files() <-chan File {
 				self.err = err
 				return
 			}
-			last_key := ""
 			for _, c := range output.Contents {
 				key := c
 				relpath := (*key.Key)[stripLen:]
 				ch <- &S3File{self.conn, self.bucket, key, relpath, nil}
-				last_key = *c.Key
+				marker = *c.Key
 			}
 			truncated = *output.IsTruncated
-			if output.NextMarker != nil {
-				marker = *output.NextMarker
-			}
-			if marker == "" {
-				// Response may not include NextMarker.
-				marker = last_key
-			}
 		}
 	}()
 	return ch
