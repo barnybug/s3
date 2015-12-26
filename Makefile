@@ -1,3 +1,5 @@
+export GO15VENDOREXPERIMENT=1
+
 package = github.com/barnybug/s3/cmd/s3
 buildargs = -ldflags '-X github.com/barnybug/s3.version=${TRAVIS_TAG}'
 
