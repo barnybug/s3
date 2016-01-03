@@ -7,6 +7,7 @@ Swiss army pen-knife for Amazon S3.
 - ls: List buckets or keys
 - get: Download keys
 - cat: Cat keys
+- grep: Search for key containing text
 - sync: Synchronise local to s3, s3 to local or s3 to s3
 - rm: Delete keys
 - mb: Create buckets
