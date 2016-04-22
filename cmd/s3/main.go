@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/barnybug/s3"
+	"github.com/madedotcom/s3/tree/grr-version-api"
 )
 
 func main() {
