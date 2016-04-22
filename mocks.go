@@ -240,6 +240,13 @@ func (self *MockS3) DeleteObjectRequest(*s3.DeleteObjectInput) (*request.Request
 func (self *MockS3) DeleteObjectsRequest(*s3.DeleteObjectsInput) (*request.Request, *s3.DeleteObjectsOutput) {
 	return nil, &s3.DeleteObjectsOutput{}
 }
+
+func (self *MockS3) GetBucketAccelerateConfiguration(input *GetBucketAccelerateConfigurationInput) (*GetBucketAccelerateConfigurationOutput, error) {
+	req, out := self.GetBucketAccelerateConfigurationRequest(input)
+	err := req.Send()
+	return out, err
+}
+
 func (self *MockS3) GetBucketAclRequest(*s3.GetBucketAclInput) (*request.Request, *s3.GetBucketAclOutput) {
 	return nil, &s3.GetBucketAclOutput{}
 }
