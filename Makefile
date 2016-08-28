@@ -12,7 +12,7 @@ deps:
 
 build-deps:
 	go get github.com/pwaller/goupx
-	go get github.com/lsegal/gucumber/cmd/gucumber
+	go get github.com/gucumber/gucumber/cmd/gucumber
 
 test: deps build-deps
 	gucumber

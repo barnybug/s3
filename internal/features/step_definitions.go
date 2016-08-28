@@ -14,7 +14,7 @@ import (
 	awss3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/barnybug/s3"
-	. "github.com/lsegal/gucumber"
+	. "github.com/gucumber/gucumber"
 )
 
 var conn s3iface.S3API
