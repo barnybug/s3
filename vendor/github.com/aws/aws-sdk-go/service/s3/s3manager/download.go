@@ -3,11 +3,12 @@ package s3manager
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -33,7 +34,7 @@ type Downloader struct {
 	PartSize int64
 
 	// The number of goroutines to spin up in parallel when sending parts.
-	// If this is set to zero, the DefaultConcurrency value will be used.
+	// If this is set to zero, the DefaultDownloadConcurrency value will be used.
 	Concurrency int
 
 	// An S3 client to use when performing downloads.
@@ -48,7 +49,7 @@ type Downloader struct {
 //
 // Example:
 //     // The session the S3 Downloader will use
-//     sess := session.New()
+//     sess, err := session.NewSession()
 //
 //     // Create a downloader with the session and default options
 //     downloader := s3manager.NewDownloader(sess)
@@ -76,8 +77,11 @@ func NewDownloader(c client.ConfigProvider, options ...func(*Downloader)) *Downl
 // to make S3 API calls.
 //
 // Example:
+//     // The session the S3 Downloader will use
+//     sess, err := session.NewSession()
+//
 //     // The S3 client the S3 Downloader will use
-//     s3Svc := s3.new(session.New())
+//     s3Svc := s3.new(sess)
 //
 //     // Create a downloader with the s3 client and default options
 //     downloader := s3manager.NewDownloaderWithClient(s3Svc)
@@ -154,39 +158,48 @@ func (d *downloader) init() {
 func (d *downloader) download() (n int64, err error) {
 	d.init()
 
-	// Spin up workers
-	ch := make(chan dlchunk, d.ctx.Concurrency)
-	for i := 0; i < d.ctx.Concurrency; i++ {
-		d.wg.Add(1)
-		go d.downloadPart(ch)
-	}
+	// Spin off first worker to check additional header information
+	d.getChunk()
 
-	// Assign work
-	for d.geterr() == nil {
-		if d.pos != 0 {
-			// This is not the first chunk, let's wait until we know the total
-			// size of the payload so we can see if we have read the entire
-			// object.
-			total := d.getTotalBytes()
+	if total := d.getTotalBytes(); total >= 0 {
+		// Spin up workers
+		ch := make(chan dlchunk, d.ctx.Concurrency)
 
-			if total < 0 {
-				// Total has not yet been set, so sleep and loop around while
-				// waiting for our first worker to resolve this value.
-				time.Sleep(10 * time.Millisecond)
-				continue
-			} else if d.pos >= total {
-				break // We're finished queueing chunks
-			}
+		for i := 0; i < d.ctx.Concurrency; i++ {
+			d.wg.Add(1)
+			go d.downloadPart(ch)
 		}
 
-		// Queue the next range of bytes to read.
-		ch <- dlchunk{w: d.w, start: d.pos, size: d.ctx.PartSize}
-		d.pos += d.ctx.PartSize
-	}
+		// Assign work
+		for d.getErr() == nil {
+			if d.pos >= total {
+				break // We're finished queuing chunks
+			}
 
-	// Wait for completion
-	close(ch)
-	d.wg.Wait()
+			// Queue the next range of bytes to read.
+			ch <- dlchunk{w: d.w, start: d.pos, size: d.ctx.PartSize}
+			d.pos += d.ctx.PartSize
+		}
+
+		// Wait for completion
+		close(ch)
+		d.wg.Wait()
+	} else {
+		// Checking if we read anything new
+		for d.err == nil {
+			d.getChunk()
+		}
+
+		// We expect a 416 error letting us know we are done downloading the
+		// total bytes. Since we do not know the content's length, this will
+		// keep grabbing chunks of data until the range of bytes specified in
+		// the request is out of range of the content. Once, this happens, a
+		// 416 should occur.
+		e, ok := d.err.(awserr.RequestFailure)
+		if ok && e.StatusCode() == http.StatusRequestedRangeNotSatisfiable {
+			d.err = nil
+		}
+	}
 
 	// Return error
 	return d.written, d.err
@@ -199,39 +212,51 @@ func (d *downloader) download() (n int64, err error) {
 // of bytes to be read so that the worker manager knows when it is finished.
 func (d *downloader) downloadPart(ch chan dlchunk) {
 	defer d.wg.Done()
-
 	for {
 		chunk, ok := <-ch
 		if !ok {
 			break
 		}
+		d.downloadChunk(chunk)
+	}
+}
 
-		if d.geterr() == nil {
-			// Get the next byte range of data
-			in := &s3.GetObjectInput{}
-			awsutil.Copy(in, d.in)
-			rng := fmt.Sprintf("bytes=%d-%d",
-				chunk.start, chunk.start+chunk.size-1)
-			in.Range = &rng
+// getChunk grabs a chunk of data from the body.
+// Not thread safe. Should only used when grabbing data on a single thread.
+func (d *downloader) getChunk() {
+	chunk := dlchunk{w: d.w, start: d.pos, size: d.ctx.PartSize}
+	d.pos += d.ctx.PartSize
+	d.downloadChunk(chunk)
+}
 
-			req, resp := d.ctx.S3.GetObjectRequest(in)
-			req.Handlers.Build.PushBack(request.MakeAddToUserAgentFreeFormHandler("S3Manager"))
-			err := req.Send()
+// downloadChunk downloads the chunk froom s3
+func (d *downloader) downloadChunk(chunk dlchunk) {
+	if d.getErr() != nil {
+		return
+	}
+	// Get the next byte range of data
+	in := &s3.GetObjectInput{}
+	awsutil.Copy(in, d.in)
+	rng := fmt.Sprintf("bytes=%d-%d",
+		chunk.start, chunk.start+chunk.size-1)
+	in.Range = &rng
 
-			if err != nil {
-				d.seterr(err)
-			} else {
-				d.setTotalBytes(resp) // Set total if not yet set.
+	req, resp := d.ctx.S3.GetObjectRequest(in)
+	req.Handlers.Build.PushBack(request.MakeAddToUserAgentFreeFormHandler("S3Manager"))
+	err := req.Send()
 
-				n, err := io.Copy(&chunk, resp.Body)
-				resp.Body.Close()
+	if err != nil {
+		d.setErr(err)
+	} else {
+		d.setTotalBytes(resp) // Set total if not yet set.
 
-				if err != nil {
-					d.seterr(err)
-				}
-				d.incrwritten(n)
-			}
+		n, err := io.Copy(&chunk, resp.Body)
+		resp.Body.Close()
+
+		if err != nil {
+			d.setErr(err)
 		}
+		d.incrWritten(n)
 	}
 }
 
@@ -259,37 +284,48 @@ func (d *downloader) setTotalBytes(resp *s3.GetObjectOutput) {
 	if resp.ContentRange == nil {
 		// ContentRange is nil when the full file contents is provied, and
 		// is not chunked. Use ContentLength instead.
-		d.totalBytes = *resp.ContentLength
-		return
-	}
+		if resp.ContentLength != nil {
+			d.totalBytes = *resp.ContentLength
+			return
+		}
+	} else {
+		parts := strings.Split(*resp.ContentRange, "/")
 
-	parts := strings.Split(*resp.ContentRange, "/")
-	total, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
-	if err != nil {
-		d.err = err
-		return
-	}
+		total := int64(-1)
+		var err error
+		// Checking for whether or not a numbered total exists
+		// If one does not exist, we will assume the total to be -1, undefined,
+		// and sequentially download each chunk until hitting a 416 error
+		totalStr := parts[len(parts)-1]
+		if totalStr != "*" {
+			total, err = strconv.ParseInt(totalStr, 10, 64)
+			if err != nil {
+				d.err = err
+				return
+			}
+		}
 
-	d.totalBytes = total
+		d.totalBytes = total
+	}
 }
 
-func (d *downloader) incrwritten(n int64) {
+func (d *downloader) incrWritten(n int64) {
 	d.m.Lock()
 	defer d.m.Unlock()
 
 	d.written += n
 }
 
-// geterr is a thread-safe getter for the error object
-func (d *downloader) geterr() error {
+// getErr is a thread-safe getter for the error object
+func (d *downloader) getErr() error {
 	d.m.Lock()
 	defer d.m.Unlock()
 
 	return d.err
 }
 
-// seterr is a thread-safe setter for the error object
-func (d *downloader) seterr(e error) {
+// setErr is a thread-safe setter for the error object
+func (d *downloader) setErr(e error) {
 	d.m.Lock()
 	defer d.m.Unlock()
 

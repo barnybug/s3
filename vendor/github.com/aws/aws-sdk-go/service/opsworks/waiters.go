@@ -118,6 +118,77 @@ func (c *OpsWorks) WaitUntilInstanceOnline(input *DescribeInstancesInput) error 
 				Argument: "Instances[].Status",
 				Expected: "terminated",
 			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "stop_failed",
+			},
+		},
+	}
+
+	w := waiter.Waiter{
+		Client: c,
+		Input:  input,
+		Config: waiterCfg,
+	}
+	return w.Wait()
+}
+
+func (c *OpsWorks) WaitUntilInstanceRegistered(input *DescribeInstancesInput) error {
+	waiterCfg := waiter.Config{
+		Operation:   "DescribeInstances",
+		Delay:       15,
+		MaxAttempts: 40,
+		Acceptors: []waiter.WaitAcceptor{
+			{
+				State:    "success",
+				Matcher:  "pathAll",
+				Argument: "Instances[].Status",
+				Expected: "registered",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "setup_failed",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "shutting_down",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "stopped",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "stopping",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "terminating",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "terminated",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "stop_failed",
+			},
 		},
 	}
 
@@ -188,6 +259,12 @@ func (c *OpsWorks) WaitUntilInstanceStopped(input *DescribeInstancesInput) error
 				Matcher:  "pathAny",
 				Argument: "Instances[].Status",
 				Expected: "start_failed",
+			},
+			{
+				State:    "failure",
+				Matcher:  "pathAny",
+				Argument: "Instances[].Status",
+				Expected: "stop_failed",
 			},
 		},
 	}

@@ -1,4 +1,4 @@
-// Package restxml provides RESTful XML serialisation of AWS
+// Package restxml provides RESTful XML serialization of AWS
 // requests and responses.
 package restxml
 
@@ -15,6 +15,18 @@ import (
 	"github.com/aws/aws-sdk-go/private/protocol/rest"
 	"github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil"
 )
+
+// BuildHandler is a named request handler for building restxml protocol requests
+var BuildHandler = request.NamedHandler{Name: "awssdk.restxml.Build", Fn: Build}
+
+// UnmarshalHandler is a named request handler for unmarshaling restxml protocol requests
+var UnmarshalHandler = request.NamedHandler{Name: "awssdk.restxml.Unmarshal", Fn: Unmarshal}
+
+// UnmarshalMetaHandler is a named request handler for unmarshaling restxml protocol request metadata
+var UnmarshalMetaHandler = request.NamedHandler{Name: "awssdk.restxml.UnmarshalMeta", Fn: UnmarshalMeta}
+
+// UnmarshalErrorHandler is a named request handler for unmarshaling restxml protocol request errors
+var UnmarshalErrorHandler = request.NamedHandler{Name: "awssdk.restxml.UnmarshalError", Fn: UnmarshalError}
 
 // Build builds a request payload for the REST XML protocol.
 func Build(r *request.Request) {

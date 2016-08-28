@@ -240,6 +240,12 @@ func (self *MockS3) DeleteObjectRequest(*s3.DeleteObjectInput) (*request.Request
 func (self *MockS3) DeleteObjectsRequest(*s3.DeleteObjectsInput) (*request.Request, *s3.DeleteObjectsOutput) {
 	return nil, &s3.DeleteObjectsOutput{}
 }
+func (self *MockS3) GetBucketAccelerateConfiguration(*s3.GetBucketAccelerateConfigurationInput) (*s3.GetBucketAccelerateConfigurationOutput, error) {
+	return &s3.GetBucketAccelerateConfigurationOutput{}, nil
+}
+func (self *MockS3) GetBucketAccelerateConfigurationRequest(*s3.GetBucketAccelerateConfigurationInput) (*request.Request, *s3.GetBucketAccelerateConfigurationOutput) {
+	return nil, &s3.GetBucketAccelerateConfigurationOutput{}
+}
 func (self *MockS3) GetBucketAclRequest(*s3.GetBucketAclInput) (*request.Request, *s3.GetBucketAclOutput) {
 	return nil, &s3.GetBucketAclOutput{}
 }
@@ -378,6 +384,15 @@ func (self *MockS3) ListObjectsRequest(*s3.ListObjectsInput) (*request.Request, 
 func (self *MockS3) ListObjectsPages(*s3.ListObjectsInput, func(*s3.ListObjectsOutput, bool) bool) error {
 	return nil
 }
+func (self *MockS3) ListObjectsV2Pages(*s3.ListObjectsV2Input, func(*s3.ListObjectsV2Output, bool) bool) error {
+	return nil
+}
+func (self *MockS3) ListObjectsV2(*s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+	return nil, nil
+}
+func (self *MockS3) ListObjectsV2Request(*s3.ListObjectsV2Input) (*request.Request, *s3.ListObjectsV2Output) {
+	return nil, nil
+}
 func (self *MockS3) ListPartsRequest(*s3.ListPartsInput) (*request.Request, *s3.ListPartsOutput) {
 	return nil, &s3.ListPartsOutput{}
 }
@@ -389,6 +404,12 @@ func (self *MockS3) ListPartsPages(*s3.ListPartsInput, func(*s3.ListPartsOutput,
 }
 func (self *MockS3) PutBucketAclRequest(*s3.PutBucketAclInput) (*request.Request, *s3.PutBucketAclOutput) {
 	return nil, &s3.PutBucketAclOutput{}
+}
+func (self *MockS3) PutBucketAccelerateConfiguration(*s3.PutBucketAccelerateConfigurationInput) (*s3.PutBucketAccelerateConfigurationOutput, error) {
+	return nil, nil
+}
+func (self *MockS3) PutBucketAccelerateConfigurationRequest(*s3.PutBucketAccelerateConfigurationInput) (*request.Request, *s3.PutBucketAccelerateConfigurationOutput) {
+	return nil, &s3.PutBucketAccelerateConfigurationOutput{}
 }
 func (self *MockS3) PutBucketAcl(*s3.PutBucketAclInput) (*s3.PutBucketAclOutput, error) {
 	return &s3.PutBucketAclOutput{}, nil

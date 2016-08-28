@@ -7,12 +7,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/client/metadata"
 	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/private/protocol/jsonrpc"
-	"github.com/aws/aws-sdk-go/private/signer/v4"
 )
 
-// Amazon Kinesis is a managed service that scales elastically for real time
-// processing of streaming big data.
+// Amazon Kinesis Streams is a managed service that scales elastically for real
+// time processing of streaming big data.
 //The service client's operations are safe to be used concurrently.
 // It is not safe to mutate any of the client's properties though.
 type Kinesis struct {
@@ -61,11 +61,11 @@ func newClient(cfg aws.Config, handlers request.Handlers, endpoint, signingRegio
 	}
 
 	// Handlers
-	svc.Handlers.Sign.PushBack(v4.Sign)
-	svc.Handlers.Build.PushBack(jsonrpc.Build)
-	svc.Handlers.Unmarshal.PushBack(jsonrpc.Unmarshal)
-	svc.Handlers.UnmarshalMeta.PushBack(jsonrpc.UnmarshalMeta)
-	svc.Handlers.UnmarshalError.PushBack(jsonrpc.UnmarshalError)
+	svc.Handlers.Sign.PushBackNamed(v4.SignRequestHandler)
+	svc.Handlers.Build.PushBackNamed(jsonrpc.BuildHandler)
+	svc.Handlers.Unmarshal.PushBackNamed(jsonrpc.UnmarshalHandler)
+	svc.Handlers.UnmarshalMeta.PushBackNamed(jsonrpc.UnmarshalMetaHandler)
+	svc.Handlers.UnmarshalError.PushBackNamed(jsonrpc.UnmarshalErrorHandler)
 
 	// Run custom client initialization if present
 	if initClient != nil {

@@ -7,15 +7,15 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/client/metadata"
 	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/private/protocol/query"
-	"github.com/aws/aws-sdk-go/private/signer/v4"
 )
 
 // This is the API Reference for Amazon Simple Email Service (Amazon SES). This
 // documentation is intended to be used in conjunction with the Amazon SES Developer
 // Guide (http://docs.aws.amazon.com/ses/latest/DeveloperGuide/Welcome.html).
 //
-// For a list of Amazon SES endpoints to use in service requests, see Regions
+//   For a list of Amazon SES endpoints to use in service requests, see Regions
 // and Amazon SES (http://docs.aws.amazon.com/ses/latest/DeveloperGuide/regions.html)
 // in the Amazon SES Developer Guide.
 //The service client's operations are safe to be used concurrently.
@@ -65,11 +65,11 @@ func newClient(cfg aws.Config, handlers request.Handlers, endpoint, signingRegio
 	}
 
 	// Handlers
-	svc.Handlers.Sign.PushBack(v4.Sign)
-	svc.Handlers.Build.PushBack(query.Build)
-	svc.Handlers.Unmarshal.PushBack(query.Unmarshal)
-	svc.Handlers.UnmarshalMeta.PushBack(query.UnmarshalMeta)
-	svc.Handlers.UnmarshalError.PushBack(query.UnmarshalError)
+	svc.Handlers.Sign.PushBackNamed(v4.SignRequestHandler)
+	svc.Handlers.Build.PushBackNamed(query.BuildHandler)
+	svc.Handlers.Unmarshal.PushBackNamed(query.UnmarshalHandler)
+	svc.Handlers.UnmarshalMeta.PushBackNamed(query.UnmarshalMetaHandler)
+	svc.Handlers.UnmarshalError.PushBackNamed(query.UnmarshalErrorHandler)
 
 	// Run custom client initialization if present
 	if initClient != nil {

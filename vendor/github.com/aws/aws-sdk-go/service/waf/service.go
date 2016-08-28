@@ -7,14 +7,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/client/metadata"
 	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/private/protocol/jsonrpc"
-	"github.com/aws/aws-sdk-go/private/signer/v4"
 )
 
 // This is the AWS WAF API Reference. This guide is for developers who need
 // detailed information about the AWS WAF API actions, data types, and errors.
 // For detailed information about AWS WAF features and an overview of how to
-// use the AWS WAF API, see the AWS WAF Developer Guide (http://docs.aws.amazon.com/waf/latest/dev/).
+// use the AWS WAF API, see the AWS WAF Developer Guide (http://docs.aws.amazon.com/waf/latest/developerguide/).
 //The service client's operations are safe to be used concurrently.
 // It is not safe to mutate any of the client's properties though.
 type WAF struct {
@@ -63,11 +63,11 @@ func newClient(cfg aws.Config, handlers request.Handlers, endpoint, signingRegio
 	}
 
 	// Handlers
-	svc.Handlers.Sign.PushBack(v4.Sign)
-	svc.Handlers.Build.PushBack(jsonrpc.Build)
-	svc.Handlers.Unmarshal.PushBack(jsonrpc.Unmarshal)
-	svc.Handlers.UnmarshalMeta.PushBack(jsonrpc.UnmarshalMeta)
-	svc.Handlers.UnmarshalError.PushBack(jsonrpc.UnmarshalError)
+	svc.Handlers.Sign.PushBackNamed(v4.SignRequestHandler)
+	svc.Handlers.Build.PushBackNamed(jsonrpc.BuildHandler)
+	svc.Handlers.Unmarshal.PushBackNamed(jsonrpc.UnmarshalHandler)
+	svc.Handlers.UnmarshalMeta.PushBackNamed(jsonrpc.UnmarshalMetaHandler)
+	svc.Handlers.UnmarshalError.PushBackNamed(jsonrpc.UnmarshalErrorHandler)
 
 	// Run custom client initialization if present
 	if initClient != nil {

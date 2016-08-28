@@ -358,6 +358,14 @@ type EC2API interface {
 
 	DescribeFlowLogs(*ec2.DescribeFlowLogsInput) (*ec2.DescribeFlowLogsOutput, error)
 
+	DescribeHostReservationOfferingsRequest(*ec2.DescribeHostReservationOfferingsInput) (*request.Request, *ec2.DescribeHostReservationOfferingsOutput)
+
+	DescribeHostReservationOfferings(*ec2.DescribeHostReservationOfferingsInput) (*ec2.DescribeHostReservationOfferingsOutput, error)
+
+	DescribeHostReservationsRequest(*ec2.DescribeHostReservationsInput) (*request.Request, *ec2.DescribeHostReservationsOutput)
+
+	DescribeHostReservations(*ec2.DescribeHostReservationsInput) (*ec2.DescribeHostReservationsOutput, error)
+
 	DescribeHostsRequest(*ec2.DescribeHostsInput) (*request.Request, *ec2.DescribeHostsOutput)
 
 	DescribeHosts(*ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error)
@@ -365,6 +373,10 @@ type EC2API interface {
 	DescribeIdFormatRequest(*ec2.DescribeIdFormatInput) (*request.Request, *ec2.DescribeIdFormatOutput)
 
 	DescribeIdFormat(*ec2.DescribeIdFormatInput) (*ec2.DescribeIdFormatOutput, error)
+
+	DescribeIdentityIdFormatRequest(*ec2.DescribeIdentityIdFormatInput) (*request.Request, *ec2.DescribeIdentityIdFormatOutput)
+
+	DescribeIdentityIdFormat(*ec2.DescribeIdentityIdFormatInput) (*ec2.DescribeIdentityIdFormatOutput, error)
 
 	DescribeImageAttributeRequest(*ec2.DescribeImageAttributeInput) (*request.Request, *ec2.DescribeImageAttributeOutput)
 
@@ -462,6 +474,18 @@ type EC2API interface {
 
 	DescribeRouteTables(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
 
+	DescribeScheduledInstanceAvailabilityRequest(*ec2.DescribeScheduledInstanceAvailabilityInput) (*request.Request, *ec2.DescribeScheduledInstanceAvailabilityOutput)
+
+	DescribeScheduledInstanceAvailability(*ec2.DescribeScheduledInstanceAvailabilityInput) (*ec2.DescribeScheduledInstanceAvailabilityOutput, error)
+
+	DescribeScheduledInstancesRequest(*ec2.DescribeScheduledInstancesInput) (*request.Request, *ec2.DescribeScheduledInstancesOutput)
+
+	DescribeScheduledInstances(*ec2.DescribeScheduledInstancesInput) (*ec2.DescribeScheduledInstancesOutput, error)
+
+	DescribeSecurityGroupReferencesRequest(*ec2.DescribeSecurityGroupReferencesInput) (*request.Request, *ec2.DescribeSecurityGroupReferencesOutput)
+
+	DescribeSecurityGroupReferences(*ec2.DescribeSecurityGroupReferencesInput) (*ec2.DescribeSecurityGroupReferencesOutput, error)
+
 	DescribeSecurityGroupsRequest(*ec2.DescribeSecurityGroupsInput) (*request.Request, *ec2.DescribeSecurityGroupsOutput)
 
 	DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
@@ -492,6 +516,8 @@ type EC2API interface {
 
 	DescribeSpotFleetRequests(*ec2.DescribeSpotFleetRequestsInput) (*ec2.DescribeSpotFleetRequestsOutput, error)
 
+	DescribeSpotFleetRequestsPages(*ec2.DescribeSpotFleetRequestsInput, func(*ec2.DescribeSpotFleetRequestsOutput, bool) bool) error
+
 	DescribeSpotInstanceRequestsRequest(*ec2.DescribeSpotInstanceRequestsInput) (*request.Request, *ec2.DescribeSpotInstanceRequestsOutput)
 
 	DescribeSpotInstanceRequests(*ec2.DescribeSpotInstanceRequestsInput) (*ec2.DescribeSpotInstanceRequestsOutput, error)
@@ -501,6 +527,10 @@ type EC2API interface {
 	DescribeSpotPriceHistory(*ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error)
 
 	DescribeSpotPriceHistoryPages(*ec2.DescribeSpotPriceHistoryInput, func(*ec2.DescribeSpotPriceHistoryOutput, bool) bool) error
+
+	DescribeStaleSecurityGroupsRequest(*ec2.DescribeStaleSecurityGroupsInput) (*request.Request, *ec2.DescribeStaleSecurityGroupsOutput)
+
+	DescribeStaleSecurityGroups(*ec2.DescribeStaleSecurityGroupsInput) (*ec2.DescribeStaleSecurityGroupsOutput, error)
 
 	DescribeSubnetsRequest(*ec2.DescribeSubnetsInput) (*request.Request, *ec2.DescribeSubnetsOutput)
 
@@ -535,6 +565,10 @@ type EC2API interface {
 	DescribeVpcClassicLinkRequest(*ec2.DescribeVpcClassicLinkInput) (*request.Request, *ec2.DescribeVpcClassicLinkOutput)
 
 	DescribeVpcClassicLink(*ec2.DescribeVpcClassicLinkInput) (*ec2.DescribeVpcClassicLinkOutput, error)
+
+	DescribeVpcClassicLinkDnsSupportRequest(*ec2.DescribeVpcClassicLinkDnsSupportInput) (*request.Request, *ec2.DescribeVpcClassicLinkDnsSupportOutput)
+
+	DescribeVpcClassicLinkDnsSupport(*ec2.DescribeVpcClassicLinkDnsSupportInput) (*ec2.DescribeVpcClassicLinkDnsSupportOutput, error)
 
 	DescribeVpcEndpointServicesRequest(*ec2.DescribeVpcEndpointServicesInput) (*request.Request, *ec2.DescribeVpcEndpointServicesOutput)
 
@@ -588,6 +622,10 @@ type EC2API interface {
 
 	DisableVpcClassicLink(*ec2.DisableVpcClassicLinkInput) (*ec2.DisableVpcClassicLinkOutput, error)
 
+	DisableVpcClassicLinkDnsSupportRequest(*ec2.DisableVpcClassicLinkDnsSupportInput) (*request.Request, *ec2.DisableVpcClassicLinkDnsSupportOutput)
+
+	DisableVpcClassicLinkDnsSupport(*ec2.DisableVpcClassicLinkDnsSupportInput) (*ec2.DisableVpcClassicLinkDnsSupportOutput, error)
+
 	DisassociateAddressRequest(*ec2.DisassociateAddressInput) (*request.Request, *ec2.DisassociateAddressOutput)
 
 	DisassociateAddress(*ec2.DisassociateAddressInput) (*ec2.DisassociateAddressOutput, error)
@@ -608,9 +646,21 @@ type EC2API interface {
 
 	EnableVpcClassicLink(*ec2.EnableVpcClassicLinkInput) (*ec2.EnableVpcClassicLinkOutput, error)
 
+	EnableVpcClassicLinkDnsSupportRequest(*ec2.EnableVpcClassicLinkDnsSupportInput) (*request.Request, *ec2.EnableVpcClassicLinkDnsSupportOutput)
+
+	EnableVpcClassicLinkDnsSupport(*ec2.EnableVpcClassicLinkDnsSupportInput) (*ec2.EnableVpcClassicLinkDnsSupportOutput, error)
+
 	GetConsoleOutputRequest(*ec2.GetConsoleOutputInput) (*request.Request, *ec2.GetConsoleOutputOutput)
 
 	GetConsoleOutput(*ec2.GetConsoleOutputInput) (*ec2.GetConsoleOutputOutput, error)
+
+	GetConsoleScreenshotRequest(*ec2.GetConsoleScreenshotInput) (*request.Request, *ec2.GetConsoleScreenshotOutput)
+
+	GetConsoleScreenshot(*ec2.GetConsoleScreenshotInput) (*ec2.GetConsoleScreenshotOutput, error)
+
+	GetHostReservationPurchasePreviewRequest(*ec2.GetHostReservationPurchasePreviewInput) (*request.Request, *ec2.GetHostReservationPurchasePreviewOutput)
+
+	GetHostReservationPurchasePreview(*ec2.GetHostReservationPurchasePreviewInput) (*ec2.GetHostReservationPurchasePreviewOutput, error)
 
 	GetPasswordDataRequest(*ec2.GetPasswordDataInput) (*request.Request, *ec2.GetPasswordDataOutput)
 
@@ -643,6 +693,10 @@ type EC2API interface {
 	ModifyIdFormatRequest(*ec2.ModifyIdFormatInput) (*request.Request, *ec2.ModifyIdFormatOutput)
 
 	ModifyIdFormat(*ec2.ModifyIdFormatInput) (*ec2.ModifyIdFormatOutput, error)
+
+	ModifyIdentityIdFormatRequest(*ec2.ModifyIdentityIdFormatInput) (*request.Request, *ec2.ModifyIdentityIdFormatOutput)
+
+	ModifyIdentityIdFormat(*ec2.ModifyIdentityIdFormatInput) (*ec2.ModifyIdentityIdFormatOutput, error)
 
 	ModifyImageAttributeRequest(*ec2.ModifyImageAttributeInput) (*request.Request, *ec2.ModifyImageAttributeOutput)
 
@@ -688,6 +742,10 @@ type EC2API interface {
 
 	ModifyVpcEndpoint(*ec2.ModifyVpcEndpointInput) (*ec2.ModifyVpcEndpointOutput, error)
 
+	ModifyVpcPeeringConnectionOptionsRequest(*ec2.ModifyVpcPeeringConnectionOptionsInput) (*request.Request, *ec2.ModifyVpcPeeringConnectionOptionsOutput)
+
+	ModifyVpcPeeringConnectionOptions(*ec2.ModifyVpcPeeringConnectionOptionsInput) (*ec2.ModifyVpcPeeringConnectionOptionsOutput, error)
+
 	MonitorInstancesRequest(*ec2.MonitorInstancesInput) (*request.Request, *ec2.MonitorInstancesOutput)
 
 	MonitorInstances(*ec2.MonitorInstancesInput) (*ec2.MonitorInstancesOutput, error)
@@ -696,9 +754,17 @@ type EC2API interface {
 
 	MoveAddressToVpc(*ec2.MoveAddressToVpcInput) (*ec2.MoveAddressToVpcOutput, error)
 
+	PurchaseHostReservationRequest(*ec2.PurchaseHostReservationInput) (*request.Request, *ec2.PurchaseHostReservationOutput)
+
+	PurchaseHostReservation(*ec2.PurchaseHostReservationInput) (*ec2.PurchaseHostReservationOutput, error)
+
 	PurchaseReservedInstancesOfferingRequest(*ec2.PurchaseReservedInstancesOfferingInput) (*request.Request, *ec2.PurchaseReservedInstancesOfferingOutput)
 
 	PurchaseReservedInstancesOffering(*ec2.PurchaseReservedInstancesOfferingInput) (*ec2.PurchaseReservedInstancesOfferingOutput, error)
+
+	PurchaseScheduledInstancesRequest(*ec2.PurchaseScheduledInstancesInput) (*request.Request, *ec2.PurchaseScheduledInstancesOutput)
+
+	PurchaseScheduledInstances(*ec2.PurchaseScheduledInstancesInput) (*ec2.PurchaseScheduledInstancesOutput, error)
 
 	RebootInstancesRequest(*ec2.RebootInstancesInput) (*request.Request, *ec2.RebootInstancesOutput)
 
@@ -779,6 +845,10 @@ type EC2API interface {
 	RunInstancesRequest(*ec2.RunInstancesInput) (*request.Request, *ec2.Reservation)
 
 	RunInstances(*ec2.RunInstancesInput) (*ec2.Reservation, error)
+
+	RunScheduledInstancesRequest(*ec2.RunScheduledInstancesInput) (*request.Request, *ec2.RunScheduledInstancesOutput)
+
+	RunScheduledInstances(*ec2.RunScheduledInstancesInput) (*ec2.RunScheduledInstancesOutput, error)
 
 	StartInstancesRequest(*ec2.StartInstancesInput) (*request.Request, *ec2.StartInstancesOutput)
 
