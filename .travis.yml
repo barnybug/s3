@@ -18,6 +18,7 @@ deploy:
   - release/s3-linux-386
   - release/s3-linux-amd64
   - release/s3-linux-arm
+  - release/s3-linux-arm64
   - release/s3-darwin-amd64
   - release/s3-windows-386.exe
   - release/s3-windows-amd64.exe
