@@ -25,6 +25,7 @@ release:
 	GOOS=linux GOARCH=386 go build $(buildargs) -o release/s3-linux-386 $(package)
 	GOOS=linux GOARCH=amd64 go build $(buildargs) -o release/s3-linux-amd64 $(package)
 	GOOS=linux GOARCH=arm go build $(buildargs) -o release/s3-linux-arm $(package)
+	GOOS=linux GOARCH=arm64 go build $(buildargs) -o release/s3-linux-arm64 $(package)
 	GOOS=darwin GOARCH=amd64 go build $(buildargs) -o release/s3-darwin-amd64 $(package)
 	GOOS=windows GOARCH=386 go build $(buildargs) -o release/s3-windows-386.exe $(package)
 	GOOS=windows GOARCH=amd64 go build $(buildargs) -o release/s3-windows-amd64.exe $(package)
