@@ -13,7 +13,7 @@ before_deploy:
 deploy:
   provider: releases
   api_key:
-    secure: ogxurLU+Ak33qEYRZItJRBHj8TP7VTXjEiAmCBkVvatkFH6nnewfcLy3UliAnuu+8wp0YycYLyBmO+Zu+ZFLY3a9SN34yov/J6MvaSokoHgZZNzTvZsHf36+WYFI8mqBdeIXBuEj4qbdeOlP21LZjJA6SiIJjEyaXhGWn1zpN1k=
+    secure: q7NTJw0vHzThMnh3Nbj4wgxmhCAon99jLgyBv1m1Xra3E+jeYNXDsE4ey1doR+oQz9IHcJ2ZtZHxByWXYqB9ua9jWJWFrL8/YRZvHV1Zql3pAQgQgZUsjoEkXA1HWTytHgCUCZjcF70/rrPKWrV9YZNRKJ6ZeEJmUu1w8SidssY=
   file:
   - release/s3-linux-386
   - release/s3-linux-amd64
