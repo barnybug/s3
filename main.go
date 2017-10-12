@@ -21,7 +21,7 @@ var (
 	ignoreErrors bool
 	acl          string
 )
-var version string /* passed in by go build */
+var version = "master" /* passed in by go build */
 
 var ValidACLs = map[string]bool{
 	"private":                   true,
