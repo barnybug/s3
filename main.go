@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 )
 
 var (
@@ -151,6 +151,16 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 			Name:      "grep",
 			Usage:     "Grep keys",
 			ArgsUsage: "string key ...",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "no-keys-prefix",
+					Usage: "Suppress the prefixing of key names on output",
+				},
+				cli.BoolFlag{
+					Name:  "keys-with-matches, l",
+					Usage: "only print the name of each key which contains matches",
+				},
+			},
 			Action: func(c *cli.Context) {
 				if len(c.Args()) < 2 {
 					cli.ShowCommandHelp(c, "grep")
@@ -160,7 +170,7 @@ func Main(conn s3iface.S3API, args []string, output io.Writer) int {
 				conn := getConnection(c)
 				find := c.Args().First()
 				urls := c.Args().Tail()
-				err := grepKeys(conn, find, urls)
+				err := grepKeys(conn, find, urls, c.Bool("no-keys-prefix"), c.Bool("keys-with-matches"))
 				checkErr(err)
 			},
 		},

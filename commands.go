@@ -187,8 +187,40 @@ func catKeys(conn s3iface.S3API, urls []string) error {
 	})
 }
 
-func grepKeys(conn s3iface.S3API, find string, urls []string) error {
-	findBytes := []byte(find)
+func outputMatches(buf []byte, needle []byte, prefix string) {
+	p := 0
+	for {
+		i := bytes.Index(buf[p:], needle)
+		if i == -1 {
+			break
+		}
+		i += p
+		lineStart := bytes.LastIndexByte(buf[:i], byte('\n'))
+		if lineStart == -1 {
+			lineStart = 0
+		} else {
+			lineStart += 1
+		}
+		lineEnd := bytes.IndexByte(buf[i:], byte('\n'))
+		if lineEnd == -1 {
+			lineEnd = len(buf)
+		} else {
+			lineEnd += i
+		}
+		line := string(buf[lineStart:lineEnd])
+
+		fmt.Fprintf(out, "%s%s\n", prefix, line)
+
+		p = lineEnd + 1
+		if p > len(buf)-len(needle) {
+			break
+		}
+	}
+}
+
+func grepKeys(conn s3iface.S3API, find string, urls []string, noKeysPrefix bool, keysWithMatches bool) error {
+	needle := []byte(find)
+
 	return iterateKeysParallel(conn, urls, func(file File) error {
 		reader, err := file.Reader()
 		if err != nil {
@@ -203,15 +235,25 @@ func grepKeys(conn s3iface.S3API, find string, urls []string) error {
 			}
 		}
 
+		prefix := ""
+		if !noKeysPrefix {
+			prefix = file.String() + ":"
+		}
+
 		buf := make([]byte, 4096)
 		offset := 0
 		for n, err := reader.Read(buf[offset:]); n > 0 && err == nil; n, err = reader.Read(buf) {
-			if bytes.Contains(buf, findBytes) {
-				fmt.Fprintln(out, file.String())
-				break
+			if bytes.Contains(buf, needle) {
+				if keysWithMatches {
+					// only filename required, bail early
+					fmt.Fprintln(out, file.String())
+					break
+				} else {
+					outputMatches(buf, needle, prefix)
+				}
 			}
 			// handle overlapping matches - copy last N-1 bytes to start of next
-			offset = len(findBytes) - 1
+			offset = len(needle) - 1
 			if offset > n {
 				offset = n
 			} else {
