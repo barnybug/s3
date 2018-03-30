@@ -7,8 +7,8 @@ Feature: grep command
     And bucket "s3.barnybug.github.com" key "carrot" contains "CARROT"
     And bucket "s3.barnybug.github.com" key "orange" contains "ORANGE"
     When I run "s3 grep O s3://s3.barnybug.github.com/"
-    Then the output contains "s3://s3.barnybug.github.com/carrot\n"
-    Then the output contains "s3://s3.barnybug.github.com/orange\n"
+    Then the output contains "s3://s3.barnybug.github.com/carrot:CARROT\n"
+    Then the output contains "s3://s3.barnybug.github.com/orange:ORANGE\n"
 
   Scenario: grep requires at least 2 arguments
     When I run "s3 grep carrot"
