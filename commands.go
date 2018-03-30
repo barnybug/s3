@@ -242,14 +242,14 @@ func grepKeys(conn s3iface.S3API, find string, urls []string, noKeysPrefix bool,
 
 		buf := make([]byte, 4096)
 		offset := 0
-		for n, err := reader.Read(buf[offset:]); n > 0 && err == nil; n, err = reader.Read(buf) {
-			if bytes.Contains(buf, needle) {
+		for n, err := reader.Read(buf[offset:]); n > 0 && err == nil; n, err = reader.Read(buf[offset:]) {
+			if bytes.Contains(buf[:n+offset], needle) {
 				if keysWithMatches {
 					// only filename required, bail early
 					fmt.Fprintln(out, file.String())
 					break
 				} else {
-					outputMatches(buf, needle, prefix)
+					outputMatches(buf[:n+offset], needle, prefix)
 				}
 			}
 			// handle overlapping matches - copy last N-1 bytes to start of next
