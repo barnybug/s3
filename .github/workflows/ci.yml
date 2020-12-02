@@ -17,6 +17,18 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Run BDD tests
+      run: |
+        go get github.com/gucumber/gucumber/cmd/gucumber
+        # gucumber only works from under GOPATH...
+        export GOPATH=$(go env GOPATH)
+        export PATH=$PATH:$GOPATH/bin
+        export GOSRC=$GOPATH/src/github.com/$GITHUB_REPOSITORY
+        mkdir -p $GOPATH/src/github.com/barnybug
+        ln -s $(pwd) $GOSRC
+        cd $GOSRC
+        gucumber
+
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v2
       with:
