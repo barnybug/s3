@@ -19,6 +19,7 @@ jobs:
 
     - name: Run BDD tests
       run: |
+        go get github.com/gucumber/gucumber/cmd/gucumber
         # gucumber only works from under GOPATH...
         export GOPATH=$(go env GOPATH)
         export PATH=$PATH:$GOPATH/bin
