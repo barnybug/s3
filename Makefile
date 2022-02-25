@@ -10,11 +10,7 @@ default: install
 deps:
 	go get -d -v ./...
 
-build-deps:
-	go get github.com/pwaller/goupx
-	go get github.com/gucumber/gucumber/cmd/gucumber
-
-test: deps build-deps
+test: deps
 	gucumber
 
 install:
@@ -29,9 +25,3 @@ release:
 	GOOS=darwin GOARCH=amd64 go build $(buildargs) -o release/s3-darwin-amd64 $(package)
 	GOOS=windows GOARCH=386 go build $(buildargs) -o release/s3-windows-386.exe $(package)
 	GOOS=windows GOARCH=amd64 go build $(buildargs) -o release/s3-windows-amd64.exe $(package)
-	goupx release/s3-linux-amd64
-	upx release/s3-linux-386 release/s3-linux-arm release/s3-windows-386.exe
-
-upx:
-	goupx dist/s3-linux-amd64/s3-linux-amd64
-	upx dist/s3-linux-386/s3-linux-386 dist/s3-linux-arm/s3-linux-arm dist/s3-windows-386/s3-windows-386.exe

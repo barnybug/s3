@@ -14,12 +14,6 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
-    hooks:
-      post:
-      - cmd: upx "{{ .Path }}"
-        ignore: # upx fails on win arm64
-        - goos: windows
-          goarch: amd64
 
 archives:
 - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
